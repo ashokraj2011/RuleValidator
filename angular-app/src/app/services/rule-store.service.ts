@@ -1,9 +1,12 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { ActiveTab, Rule, TestCase, TestCaseRunResult, TestDataSnapshot } from '../models/types';
 import { SAMPLE_RULES } from '../data/sample-rules';
+import { buildSampleData } from '../data/sample-test-cases';
+import { RuleEngineService } from './rule-engine.service';
 
 const LS_CASES_KEY = 'ruleValidator_testCases';
 const LS_RUNS_KEY = 'ruleValidator_runHistory';
+const LS_SEED_KEY = 'ruleValidator_seeded';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -26,6 +29,26 @@ export class RuleStoreService {
 
   readonly testCases = signal<TestCase[]>(loadFromStorage(LS_CASES_KEY, []));
   readonly runHistory = signal<TestCaseRunResult[]>(loadFromStorage(LS_RUNS_KEY, []));
+
+  private readonly engine = inject(RuleEngineService);
+
+  constructor() {
+    this.seedSampleDataIfEmpty();
+  }
+
+  /** Populate demo test cases + run history the first time the app is opened. */
+  private seedSampleDataIfEmpty() {
+    const seededFlag = localStorage.getItem(LS_SEED_KEY);
+    if (this.testCases().length > 0 || this.runHistory().length > 0 || seededFlag) {
+      return;
+    }
+    const { testCases, runHistory } = buildSampleData(this.engine, this.allRules());
+    this.testCases.set(testCases);
+    this.runHistory.set(runHistory);
+    localStorage.setItem(LS_CASES_KEY, JSON.stringify(testCases));
+    localStorage.setItem(LS_RUNS_KEY, JSON.stringify(runHistory));
+    localStorage.setItem(LS_SEED_KEY, '1');
+  }
 
   readonly selectedRule = computed(() =>
     this.allRules().find((rule) => rule.rule_id === this.selectedRuleId()) ?? this.allRules()[0],
