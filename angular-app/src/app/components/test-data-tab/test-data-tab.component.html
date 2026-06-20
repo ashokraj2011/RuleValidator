@@ -156,13 +156,96 @@
                 Data Snapshot
                 <span *ngIf="getConfig(namespace)?.isEdited" class="normal-case text-amber-600">(edited — test grounded on this data)</span>
               </label>
-              <span class="font-mono text-[10px] text-neutral-400">
-                {{ getJsonText(namespace) ? getJsonText(namespace).split('
-').length + ' lines' : 'empty' }}
-              </span>
+              <div class="flex items-center gap-2">
+                <div class="flex overflow-hidden rounded border border-neutral-300">
+                  <button
+                    type="button"
+                    (click)="setViewMode(namespace, 'table')"
+                    class="flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors"
+                    [ngClass]="viewMode(namespace) === 'table' ? 'bg-secondary text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50'"
+                  >
+                    <lucide-icon name="table" class="h-3 w-3"></lucide-icon>
+                    Table
+                  </button>
+                  <button
+                    type="button"
+                    (click)="setViewMode(namespace, 'json')"
+                    class="flex items-center gap-1 border-l border-neutral-300 px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors"
+                    [ngClass]="viewMode(namespace) === 'json' ? 'bg-secondary text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50'"
+                  >
+                    <lucide-icon name="code" class="h-3 w-3"></lucide-icon>
+                    JSON
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div class="relative">
+            <!-- TABLE VIEW -->
+            <div *ngIf="viewMode(namespace) === 'table'" class="overflow-hidden rounded border border-neutral-300">
+              <table class="w-full border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-neutral-200 bg-neutral-50 text-left text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                    <th class="px-3 py-2 font-bold">Attribute</th>
+                    <th class="px-3 py-2 font-bold">Value</th>
+                    <th class="w-16 px-3 py-2 font-bold">Type</th>
+                    <th class="w-10 px-2 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of tableRows(namespace)" class="border-b border-neutral-100 last:border-0">
+                    <td class="px-2 py-1.5 align-top">
+                      <input
+                        type="text"
+                        [ngModel]="row.key"
+                        (ngModelChange)="updateRowKey(namespace, row.id, $event)"
+                        placeholder="attribute"
+                        class="w-full rounded border border-transparent bg-neutral-50 px-2 py-1 font-mono text-xs font-semibold text-neutral-800 outline-none hover:border-neutral-200 focus:border-primary focus:bg-white focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td class="px-2 py-1.5 align-top">
+                      <input
+                        type="text"
+                        [ngModel]="row.valueText"
+                        (ngModelChange)="updateRowValue(namespace, row.id, $event)"
+                        placeholder='e.g. 18  |  "US"  |  ["VIP"]  |  true'
+                        class="w-full rounded border border-transparent bg-neutral-50 px-2 py-1 font-mono text-xs text-neutral-800 outline-none hover:border-neutral-200 focus:border-primary focus:bg-white focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td class="px-3 py-1.5 align-top">
+                      <span class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-neutral-500">{{ rowValueType(row) }}</span>
+                    </td>
+                    <td class="px-2 py-1.5 text-right align-top">
+                      <button
+                        type="button"
+                        (click)="removeRow(namespace, row.id)"
+                        class="rounded p-1 text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        title="Remove field"
+                      >
+                        <lucide-icon name="trash-2" class="h-3.5 w-3.5"></lucide-icon>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!tableRows(namespace).length">
+                    <td colspan="4" class="px-3 py-4 text-center text-[11px] text-neutral-400">
+                      No fields yet — add one below or fetch from DB.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="border-t border-neutral-200 bg-neutral-50 px-3 py-2">
+                <button
+                  type="button"
+                  (click)="addRow(namespace)"
+                  class="flex items-center gap-1.5 rounded border border-dashed border-neutral-300 px-2.5 py-1 text-[11px] font-bold text-secondary transition-colors hover:border-secondary hover:bg-white"
+                >
+                  <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon>
+                  Add Field
+                </button>
+              </div>
+            </div>
+
+            <!-- JSON VIEW -->
+            <div *ngIf="viewMode(namespace) === 'json'" class="relative">
               <div class="flex overflow-hidden rounded border border-neutral-300">
                 <div class="w-8 shrink-0 select-none border-r border-neutral-200 bg-neutral-50 pt-3 pr-2 text-right font-mono text-[10px] text-neutral-400">
                   <div *ngFor="let line of lineNumbers(getJsonText(namespace))" class="leading-5">{{ line }}</div>

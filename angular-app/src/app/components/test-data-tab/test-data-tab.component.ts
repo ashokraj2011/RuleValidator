@@ -7,6 +7,12 @@ import { MockDbService } from '../../services/mock-db.service';
 import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 
+interface TableRow {
+  id: number;
+  key: string;
+  valueText: string;
+}
+
 @Component({
   selector: 'app-test-data-tab',
   standalone: true,
@@ -30,6 +36,12 @@ export class TestDataTabComponent {
   readonly loadingNamespaces = signal<Set<string>>(new Set());
   readonly editingJson = signal<Record<string, string>>({});
   readonly jsonErrors = signal<Record<string, string>>({});
+
+  // Per-namespace editor view: 'table' (field rows) or 'json'
+  readonly viewModes = signal<Record<string, 'table' | 'json'>>({});
+  // Per-namespace table draft rows (key/value pairs being edited)
+  readonly tableDrafts = signal<Record<string, TableRow[]>>({});
+  private rowSeq = 0;
 
   // Save as Test Case modal
   readonly showSaveModal = signal(false);
@@ -56,6 +68,8 @@ export class TestDataTabComponent {
     const snapshot = this.store.testData();
     const nextConfigs: Record<string, NamespaceConfig> = {};
     const nextEditing = { ...this.editingJson() };
+    const nextModes = { ...this.viewModes() };
+    const nextDrafts = { ...this.tableDrafts() };
 
     for (const namespace of namespaces) {
       const existing = currentConfigs[namespace];
@@ -70,12 +84,126 @@ export class TestDataTabComponent {
       if (!nextEditing[namespace] && Object.keys(data).length > 0) {
         nextEditing[namespace] = JSON.stringify(data, null, 2);
       }
+      nextModes[namespace] ??= 'table';
+      nextDrafts[namespace] = this.buildDraft(nextConfigs[namespace].data);
     }
 
     this.namespaceConfigs.set(nextConfigs);
     this.editingJson.set(nextEditing);
+    this.viewModes.set(nextModes);
+    this.tableDrafts.set(nextDrafts);
     this.jsonErrors.set({});
     this.expandedNamespaces.set(new Set(namespaces));
+  }
+
+  // --- Editor view toggle (table <-> json) ---
+
+  viewMode(namespace: string): 'table' | 'json' {
+    return this.viewModes()[namespace] ?? 'table';
+  }
+
+  setViewMode(namespace: string, mode: 'table' | 'json') {
+    if (this.viewMode(namespace) === mode) return;
+    const data = this.namespaceConfigs()[namespace]?.data ?? {};
+    if (mode === 'table') {
+      // Rebuild table rows from current data so it reflects JSON edits
+      this.tableDrafts.update((drafts) => ({ ...drafts, [namespace]: this.buildDraft(data) }));
+    } else {
+      // Rebuild JSON text from current data so it reflects table edits
+      this.editingJson.update((current) => ({ ...current, [namespace]: JSON.stringify(data, null, 2) }));
+      this.jsonErrors.update((current) => { const next = { ...current }; delete next[namespace]; return next; });
+    }
+    this.viewModes.update((modes) => ({ ...modes, [namespace]: mode }));
+  }
+
+  // --- Table editing ---
+
+  private buildDraft(data: NamespaceData): TableRow[] {
+    return Object.entries(data ?? {}).map(([key, value]) => ({
+      id: this.rowSeq++,
+      key,
+      valueText: this.valueToText(value),
+    }));
+  }
+
+  private valueToText(value: any): string {
+    if (typeof value === 'string') return value;
+    if (value === undefined) return '';
+    return JSON.stringify(value);
+  }
+
+  private textToValue(text: string): any {
+    const trimmed = text.trim();
+    if (trimmed === '') return '';
+    if (trimmed === 'true') return true;
+    if (trimmed === 'false') return false;
+    if (trimmed === 'null') return null;
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+    if (/^[[{"]/.test(trimmed)) {
+      try { return JSON.parse(trimmed); } catch { return text; }
+    }
+    return text;
+  }
+
+  tableRows(namespace: string): TableRow[] {
+    return this.tableDrafts()[namespace] ?? [];
+  }
+
+  rowValueType(row: TableRow): string {
+    const v = this.textToValue(row.valueText);
+    if (Array.isArray(v)) return 'array';
+    if (v === null) return 'null';
+    return typeof v;
+  }
+
+  updateRowKey(namespace: string, id: number, key: string) {
+    this.tableDrafts.update((drafts) => ({
+      ...drafts,
+      [namespace]: (drafts[namespace] ?? []).map((r) => (r.id === id ? { ...r, key } : r)),
+    }));
+    this.commitDraft(namespace);
+  }
+
+  updateRowValue(namespace: string, id: number, valueText: string) {
+    this.tableDrafts.update((drafts) => ({
+      ...drafts,
+      [namespace]: (drafts[namespace] ?? []).map((r) => (r.id === id ? { ...r, valueText } : r)),
+    }));
+    this.commitDraft(namespace);
+  }
+
+  addRow(namespace: string) {
+    if (!this.isExpanded(namespace)) this.expandedNamespaces.update((s) => new Set(s).add(namespace));
+    this.tableDrafts.update((drafts) => ({
+      ...drafts,
+      [namespace]: [...(drafts[namespace] ?? []), { id: this.rowSeq++, key: '', valueText: '' }],
+    }));
+  }
+
+  removeRow(namespace: string, id: number) {
+    this.tableDrafts.update((drafts) => ({
+      ...drafts,
+      [namespace]: (drafts[namespace] ?? []).filter((r) => r.id !== id),
+    }));
+    this.commitDraft(namespace);
+  }
+
+  /** Rebuild the namespace data object from its table rows and sync everywhere. */
+  private commitDraft(namespace: string) {
+    const rows = this.tableDrafts()[namespace] ?? [];
+    const data: NamespaceData = {};
+    for (const row of rows) {
+      const key = row.key.trim();
+      if (!key) continue;
+      data[key] = this.textToValue(row.valueText);
+    }
+    this.namespaceConfigs.update((configs) => ({
+      ...configs,
+      [namespace]: { ...configs[namespace], data, isEdited: true, isFetched: true },
+    }));
+    this.editingJson.update((current) => ({ ...current, [namespace]: JSON.stringify(data, null, 2) }));
+    this.jsonErrors.update((current) => { const next = { ...current }; delete next[namespace]; return next; });
+    this.store.testData.update((current) => ({ ...current, [namespace]: data }));
   }
 
   toggleNamespace(namespace: string) {
@@ -109,6 +237,7 @@ export class TestDataTabComponent {
     const cloned = JSON.parse(JSON.stringify(data)) as NamespaceData;
     this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], data: cloned, isFetched: true, isEdited: false } }));
     this.editingJson.update(current => ({ ...current, [namespace]: JSON.stringify(cloned, null, 2) }));
+    this.tableDrafts.update(drafts => ({ ...drafts, [namespace]: this.buildDraft(cloned) }));
     this.jsonErrors.update(current => { const next = { ...current }; delete next[namespace]; return next; });
     this.store.testData.update(current => ({ ...current, [namespace]: cloned }));
     this.store.showToast(`✅ Fetched "${namespace}" data for key "${config.dbKey}" successfully.`);
