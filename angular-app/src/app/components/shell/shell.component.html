@@ -1,112 +1,171 @@
 <div class="relative flex min-h-screen select-all flex-col overflow-x-hidden bg-background font-sans text-neutral-850">
-  <div *ngIf="store.toastMessage() as toast" class="animate-fade-in fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-secondary bg-neutral-900 px-5 py-3 text-white shadow-xl">
+
+  <!-- Toast -->
+  <div *ngIf="store.toastMessage() as toast"
+    class="animate-fade-in fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-secondary bg-neutral-900 px-5 py-3 text-white shadow-xl">
     <lucide-icon name="sparkles" class="h-5 w-5 shrink-0 text-yellow-400"></lucide-icon>
     <span class="text-xs font-semibold">{{ toast }}</span>
   </div>
 
+  <!-- Header -->
   <header class="fixed top-0 left-0 z-40 flex h-16 w-full items-center justify-between border-b border-neutral-300 bg-white px-6 select-none">
     <div class="flex items-center gap-6">
       <div class="flex cursor-pointer items-center gap-2" (click)="switchTab('overview')">
         <span class="text-lg font-extrabold tracking-tight text-primary">CCRE Rule Validation Studio</span>
       </div>
       <nav class="hidden h-full items-center gap-4 md:flex">
-        <button type="button" (click)="switchTab('overview')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors" [ngClass]="store.activeTab() === 'overview' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Dashboard</button>
-        <button type="button" (click)="switchTab('test-data')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors" [ngClass]="store.activeTab() === 'test-data' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Test Data</button>
-        <button type="button" (click)="switchTab('test-runs')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors" [ngClass]="store.activeTab() === 'test-runs' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Evaluate</button>
+        <button type="button" (click)="switchTab('overview')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors"
+          [ngClass]="store.activeTab() === 'overview' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Dashboard</button>
+        <button type="button" (click)="switchTab('test-data')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors"
+          [ngClass]="store.activeTab() === 'test-data' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Test Data</button>
+        <button type="button" (click)="switchTab('test-runs')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors"
+          [ngClass]="store.activeTab() === 'test-runs' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Evaluate</button>
       </nav>
     </div>
 
     <div class="flex items-center gap-3">
-      <select [ngModel]="store.selectedRuleId()" (ngModelChange)="handleHeaderRuleChange($event)" class="cursor-pointer rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold text-secondary outline-none focus:ring-1 focus:ring-primary">
-        <option *ngFor="let rule of store.allRules()" [value]="rule.rule_id">{{ rule.name }}</option>
-      </select>
-      <button type="button" (click)="store.showToast('Validated all active rules against current test data.')" class="hidden whitespace-nowrap rounded border border-neutral-400 px-4 py-1.5 text-xs font-bold text-neutral-800 transition-colors hover:bg-neutral-50 sm:inline-block">Validate All</button>
+      <button type="button" (click)="store.showToast('Validated all active rules against current test data.')"
+        class="hidden whitespace-nowrap rounded border border-neutral-400 px-4 py-1.5 text-xs font-bold text-neutral-800 transition-colors hover:bg-neutral-50 sm:inline-block">
+        Validate All
+      </button>
       <div class="ml-1 flex items-center gap-1 border-l border-neutral-200 pl-3">
-        <button type="button" (click)="store.showToast('Zero critical alerts.')" class="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900" title="Notifications"><lucide-icon name="bell" class="h-4.5 w-4.5"></lucide-icon></button>
-        <button type="button" (click)="store.showToast('Settings managed via backend.')" class="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900" title="Preferences"><lucide-icon name="settings" class="h-4.5 w-4.5"></lucide-icon></button>
-        <img alt="User Profile" class="ml-1.5 h-8 w-8 shrink-0 rounded-full border border-neutral-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsYpyMxPJSuLkythkHCI1RN00yDZ0xRHm_S10Ud52TDYQmRODAyfmTUtwhLFrka4YC4gVlvIMbTnRgbcwlcKY5gTV9PUXDfjzh_QWeuSscNaDe0RQuNx195qfF3tfZHW3--dPfPL-Qn71UyB2hhO6g0jFOcHPBA8GvgExXoJ0MQB1GFS2GNFleeIXc2tTGGgOmPV7g9uzkxWbh0zgSpP0OabrRpM_Memk_CUrLghNQPbtC51EOn2PqhzyzCAMVlBrcYn9CgxaeFXY" />
+        <button type="button" (click)="store.showToast('Zero critical alerts.')"
+          class="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900" title="Notifications">
+          <lucide-icon name="bell" class="h-4.5 w-4.5"></lucide-icon>
+        </button>
+        <button type="button" (click)="store.showToast('Settings managed via backend.')"
+          class="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900" title="Preferences">
+          <lucide-icon name="settings" class="h-4.5 w-4.5"></lucide-icon>
+        </button>
+        <img alt="User Profile" class="ml-1.5 h-8 w-8 shrink-0 rounded-full border border-neutral-300"
+          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsYpyMxPJSuLkythkHCI1RN00yDZ0xRHm_S10Ud52TDYQmRODAyfmTUtwhLFrka4YC4gVlvIMbTnRgbcwlcKY5gTV9PUXDfjzh_QWeuSscNaDe0RQuNx195qfF3tfZHW3--dPfPL-Qn71UyB2hhO6g0jFOcHPBA8GvgExXoJ0MQB1GFS2GNFleeIXc2tTGGgOmPV7g9uzkxWbh0zgSpP0OabrRpM_Memk_CUrLghNQPbtC51EOn2PqhzyzCAMVlBrcYn9CgxaeFXY" />
       </div>
     </div>
   </header>
 
+  <!-- Body -->
   <div class="flex min-h-0 flex-1 pt-16">
-    <aside class="fixed top-16 left-0 z-30 flex h-[calc(100vh-64px)] w-64 flex-col border-r border-neutral-300 bg-[#f4f4f4] py-4 select-none">
-      <div class="mb-5 px-4">
-        <div class="mb-3.5 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-2 shadow-xs">
+
+    <!-- Sidebar -->
+    <aside class="fixed top-16 left-0 z-30 flex h-[calc(100vh-64px)] w-64 flex-col border-r border-neutral-300 bg-[#f4f4f4] select-none">
+
+      <!-- Engine + selected rule info -->
+      <div class="shrink-0 px-4 pt-4 pb-3">
+        <div class="mb-3 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-2 shadow-xs">
           <span class="rounded bg-primary p-1.5 text-white shrink-0"><lucide-icon name="shield-check" class="h-5 w-5"></lucide-icon></span>
           <div>
             <div class="text-xs font-extrabold leading-tight text-primary">Rule Engine v4.2</div>
             <div class="text-[9px] font-bold uppercase tracking-wider text-neutral-400">Enterprise Validation</div>
           </div>
         </div>
-        <div class="mt-2.5 rounded-lg border border-neutral-200 bg-white p-3">
+        <div class="rounded-lg border border-neutral-200 bg-white p-3">
           <div class="truncate text-xs font-bold text-secondary">{{ selectedRule().name }}</div>
           <div class="mt-0.5 text-[10px] text-neutral-400">{{ selectedRule().rule_id }} • {{ store.allRules().length }} rules loaded</div>
         </div>
       </div>
 
-      <div class="flex-1 space-y-1.5 overflow-y-auto px-3">
+      <!-- Navigation -->
+      <div class="shrink-0 space-y-1 px-3 pb-3">
         <p class="px-3 pb-1 text-[9px] font-bold uppercase tracking-widest text-neutral-400">Navigation</p>
-        <button type="button" (click)="switchTab('overview')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all" [ngClass]="store.activeTab() === 'overview' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e] shadow-2xs' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'"><lucide-icon name="layout-dashboard" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Overview</span></button>
-        <button type="button" (click)="switchTab('test-data')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all" [ngClass]="store.activeTab() === 'test-data' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e] shadow-2xs' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'"><lucide-icon name="database" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Test Data</span></button>
-        <button type="button" (click)="switchTab('generated')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all" [ngClass]="store.activeTab() === 'generated' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e] shadow-2xs' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'"><lucide-icon name="beaker" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Generated Tests</span></button>
-        <button type="button" (click)="switchTab('test-runs')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all" [ngClass]="store.activeTab() === 'test-runs' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e] shadow-2xs' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'"><lucide-icon name="circle-play" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Evaluate / Test Runs</span></button>
-        <button type="button" (click)="switchTab('coverage')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all" [ngClass]="store.activeTab() === 'coverage' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e] shadow-2xs' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'"><lucide-icon name="trending-up" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Coverage</span></button>
-
-        <p class="px-3 pt-4 pb-1 text-[9px] font-bold uppercase tracking-widest text-neutral-400">Rules</p>
-        <button *ngFor="let rule of store.allRules()" type="button" (click)="selectRule(rule.rule_id)" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all" [ngClass]="store.selectedRuleId() === rule.rule_id ? 'bg-secondary/10 font-bold text-secondary' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
-          <lucide-icon name="layers" class="h-3.5 w-3.5 shrink-0 text-secondary"></lucide-icon>
-          <div class="min-w-0 flex-1"><span class="block truncate text-xs font-semibold">{{ rule.name }}</span><span class="font-mono text-[9px] text-neutral-400">{{ rule.rule_id }}</span></div>
+        <button type="button" (click)="switchTab('overview')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
+          [ngClass]="store.activeTab() === 'overview' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
+          <lucide-icon name="layout-dashboard" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Overview</span>
+        </button>
+        <button type="button" (click)="switchTab('test-data')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
+          [ngClass]="store.activeTab() === 'test-data' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
+          <lucide-icon name="database" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Test Data</span>
+        </button>
+        <button type="button" (click)="switchTab('generated')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
+          [ngClass]="store.activeTab() === 'generated' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
+          <lucide-icon name="beaker" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Generated Tests</span>
+        </button>
+        <button type="button" (click)="switchTab('test-runs')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
+          [ngClass]="store.activeTab() === 'test-runs' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
+          <lucide-icon name="circle-play" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Evaluate / Test Runs</span>
+        </button>
+        <button type="button" (click)="switchTab('coverage')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
+          [ngClass]="store.activeTab() === 'coverage' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
+          <lucide-icon name="trending-up" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Coverage</span>
         </button>
       </div>
 
-      <div class="mt-auto space-y-3 border-t border-neutral-300 px-3 pt-4">
-        <button type="button" (click)="openAddRuleModal()" class="flex w-full items-center justify-center gap-2 rounded bg-primary py-2.5 text-xs font-bold text-white shadow-xs transition-all hover:opacity-90 active:scale-95">
-          <lucide-icon name="plus" class="h-4 w-4 shrink-0"></lucide-icon>
-          Add Rule
-        </button>
-        <div class="space-y-1 text-neutral-500">
-          <a href="#docs" (click)="$event.preventDefault(); store.showToast('Opened documentation.')" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-xs transition-all hover:bg-neutral-200"><lucide-icon name="info" class="h-4 w-4 text-primary"></lucide-icon>Documentation</a>
-          <a href="#support" (click)="$event.preventDefault(); store.showToast('Connecting to support...')" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-xs transition-all hover:bg-neutral-200"><lucide-icon name="contact" class="h-4 w-4 text-primary"></lucide-icon>Support</a>
+      <!-- Rule search + list -->
+      <div class="flex min-h-0 flex-1 flex-col border-t border-neutral-200 px-3 pt-3">
+        <!-- Search header -->
+        <div class="mb-2 shrink-0">
+          <div class="mb-1.5 flex items-center justify-between px-1">
+            <p class="text-[9px] font-bold uppercase tracking-widest text-neutral-400">Rules</p>
+            <span class="text-[9px] font-mono text-neutral-400">
+              {{ filteredRules().length }}<span *ngIf="ruleSearchQuery()"> of {{ store.allRules().length }}</span>
+            </span>
+          </div>
+          <!-- Search input -->
+          <div class="relative">
+            <lucide-icon name="search" class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400 pointer-events-none"></lucide-icon>
+            <input
+              type="text"
+              [ngModel]="ruleSearchQuery()"
+              (ngModelChange)="ruleSearchQuery.set($event)"
+              placeholder="Search rules by name or ID…"
+              class="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-8 pr-8 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+            <button *ngIf="ruleSearchQuery()" type="button" (click)="clearSearch()"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700">
+              <lucide-icon name="x" class="h-3.5 w-3.5"></lucide-icon>
+            </button>
+          </div>
         </div>
+
+        <!-- Filtered rule list -->
+        <div class="flex-1 overflow-y-auto space-y-0.5 pr-0.5">
+          <ng-container *ngIf="filteredRules().length > 0; else noRules">
+            <button *ngFor="let rule of filteredRules()" type="button" (click)="selectRule(rule.rule_id)"
+              class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
+              [ngClass]="store.selectedRuleId() === rule.rule_id
+                ? 'bg-secondary/10 text-secondary font-bold'
+                : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
+              <lucide-icon name="layers" class="h-3.5 w-3.5 shrink-0 text-secondary"></lucide-icon>
+              <div class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-semibold">{{ rule.name }}</span>
+                <span class="font-mono text-[9px] text-neutral-400">{{ rule.rule_id }}</span>
+              </div>
+            </button>
+          </ng-container>
+          <ng-template #noRules>
+            <div class="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <lucide-icon name="search-x" class="h-8 w-8 text-neutral-300"></lucide-icon>
+              <p class="text-xs font-semibold text-neutral-400">No rules match</p>
+              <p class="text-[10px] text-neutral-400">"{{ ruleSearchQuery() }}"</p>
+              <button type="button" (click)="clearSearch()" class="mt-1 text-[10px] text-primary underline hover:no-underline">Clear search</button>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Footer links -->
+      <div class="shrink-0 border-t border-neutral-300 px-3 pt-3 pb-4 space-y-1 text-neutral-500">
+        <a href="#docs" (click)="$event.preventDefault(); store.showToast('Opened documentation.')"
+          class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-xs transition-all hover:bg-neutral-200">
+          <lucide-icon name="info" class="h-4 w-4 text-primary"></lucide-icon>Documentation
+        </a>
+        <a href="#support" (click)="$event.preventDefault(); store.showToast('Connecting to support...')"
+          class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-xs transition-all hover:bg-neutral-200">
+          <lucide-icon name="contact" class="h-4 w-4 text-primary"></lucide-icon>Support
+        </a>
       </div>
     </aside>
 
+    <!-- Main content -->
     <main class="ml-64 block flex-1 overflow-y-auto bg-[#fcf9f8] p-6">
       <div class="mx-auto max-w-[var(--size-container-max)] p-1">
         @switch (store.activeTab()) {
-          @case ('overview') { <app-overview-tab></app-overview-tab> }
+          @case ('overview')  { <app-overview-tab></app-overview-tab> }
           @case ('test-data') { <app-test-data-tab></app-test-data-tab> }
           @case ('generated') { <app-generated-tests-tab></app-generated-tests-tab> }
           @case ('test-runs') { <app-test-runs-tab></app-test-runs-tab> }
-          @case ('coverage') { <app-coverage-tab></app-coverage-tab> }
+          @case ('coverage')  { <app-coverage-tab></app-coverage-tab> }
         }
       </div>
     </main>
-  </div>
-
-  <div *ngIf="isNewValidationModalOpen()" class="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-xs select-none">
-    <div class="animate-scale-up relative w-full max-w-lg rounded-lg border border-neutral-300 bg-white p-6 shadow-2xl">
-      <button type="button" (click)="closeAddRuleModal()" class="absolute top-4 right-4 rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"><lucide-icon name="x" class="h-5 w-5"></lucide-icon></button>
-      <div class="mb-4 flex items-center gap-3.5">
-        <span class="rounded bg-[#79a9fd]/20 p-2 text-secondary"><lucide-icon name="shield-check" class="h-6 w-6 text-primary"></lucide-icon></span>
-        <div>
-          <h3 class="text-base font-bold leading-tight text-neutral-900">Add New Rule</h3>
-          <p class="mt-0.5 text-[11px] text-neutral-500">Paste a rule JSON following the grammar</p>
-        </div>
-      </div>
-
-      <form class="space-y-4" (ngSubmit)="handleCreateRule()">
-        <div>
-          <label class="mb-1.5 block text-xs font-bold uppercase text-neutral-600">Rule JSON</label>
-          <textarea [ngModel]="newRuleJson()" (ngModelChange)="updateRuleJson($event)" name="newRuleJson" placeholder="{&#10;  &quot;rule_id&quot;: &quot;rule_5&quot;,&#10;  &quot;name&quot;: &quot;My Rule&quot;,&#10;  &quot;terms&quot;: {&#10;    &quot;operator&quot;: &quot;AND&quot;,&#10;    &quot;terms&quot;: []&#10;  }&#10;}" class="min-h-[200px] w-full resize-y rounded border border-neutral-300 px-3 py-2 font-mono text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary" required></textarea>
-          <p *ngIf="ruleJsonError()" class="mt-1 font-mono text-xs text-red-600">{{ ruleJsonError() }}</p>
-        </div>
-        <div class="flex justify-end gap-2 pt-2 text-xs">
-          <button type="button" (click)="closeAddRuleModal()" class="rounded border border-neutral-300 px-4 py-2 font-bold text-neutral-600 hover:bg-neutral-50">Cancel</button>
-          <button type="submit" class="rounded bg-primary px-4 py-2 font-bold text-white hover:opacity-95">Add Rule</button>
-        </div>
-      </form>
-    </div>
   </div>
 </div>

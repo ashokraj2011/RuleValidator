@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
-import { Rule } from '../../models/types';
 import { RuleStoreService } from '../../services/rule-store.service';
 import { CoverageTabComponent } from '../coverage-tab/coverage-tab.component';
 import { GeneratedTestsTabComponent } from '../generated-tests-tab/generated-tests-tab.component';
@@ -28,57 +27,29 @@ import { TestRunsTabComponent } from '../test-runs-tab/test-runs-tab.component';
 })
 export class ShellComponent {
   readonly store = inject(RuleStoreService);
-  readonly isNewValidationModalOpen = signal(false);
-  readonly newRuleJson = signal('');
-  readonly ruleJsonError = signal<string | null>(null);
   readonly selectedRule = computed(() => this.store.selectedRule());
 
-  openAddRuleModal() {
-    this.isNewValidationModalOpen.set(true);
-  }
+  // Rule search
+  readonly ruleSearchQuery = signal('');
+  readonly filteredRules = computed(() => {
+    const q = this.ruleSearchQuery().toLowerCase().trim();
+    if (!q) return this.store.allRules();
+    return this.store.allRules().filter(r =>
+      r.name.toLowerCase().includes(q) || r.rule_id.toLowerCase().includes(q)
+    );
+  });
 
-  closeAddRuleModal() {
-    this.isNewValidationModalOpen.set(false);
-    this.ruleJsonError.set(null);
-  }
-
-  updateRuleJson(value: string) {
-    this.newRuleJson.set(value);
-    this.ruleJsonError.set(null);
-  }
-
-  handleCreateRule() {
-    try {
-      const parsed = JSON.parse(this.newRuleJson()) as Partial<Rule>;
-      if (!parsed.rule_id || !parsed.name || !parsed.terms) {
-        this.ruleJsonError.set('Rule must have rule_id, name, and terms fields.');
-        return;
-      }
-
-      this.store.addRule(parsed as Rule);
-      this.closeAddRuleModal();
-      this.newRuleJson.set('');
-      this.store.showToast(`✨ Rule "${parsed.name}" added successfully.`);
-    } catch (error) {
-      this.ruleJsonError.set(`JSON Error: ${error instanceof Error ? error.message : 'Invalid JSON'}`);
-    }
+  clearSearch() {
+    this.ruleSearchQuery.set('');
   }
 
   switchTab(tab: 'overview' | 'test-data' | 'generated' | 'test-runs' | 'coverage') {
     this.store.activeTab.set(tab);
   }
 
-  selectRule(ruleId: string, announce = true) {
+  selectRule(ruleId: string) {
     this.store.selectRule(ruleId);
-    if (announce) {
-      const rule = this.store.allRules().find((candidate) => candidate.rule_id === ruleId);
-      this.store.showToast(`Selected: ${rule?.name ?? ruleId}`);
-    }
-  }
-
-  handleHeaderRuleChange(ruleId: string) {
-    this.store.selectRule(ruleId);
-    const rule = this.store.allRules().find((candidate) => candidate.rule_id === ruleId);
-    this.store.showToast(`Switched to rule: ${rule?.name ?? ruleId}`);
+    const rule = this.store.allRules().find(r => r.rule_id === ruleId);
+    this.store.showToast(`Selected: ${rule?.name ?? ruleId}`);
   }
 }
