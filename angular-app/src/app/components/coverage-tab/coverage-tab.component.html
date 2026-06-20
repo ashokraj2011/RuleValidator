@@ -1,0 +1,118 @@
+<div class="space-y-6">
+  <div class="mb-0 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight text-neutral-900">Coverage Analysis</h1>
+      <p class="mt-1 text-sm text-neutral-500">Comprehensive breakdown of rule logic execution and edge-case validation.</p>
+    </div>
+    <div class="shrink-0">
+      <div class="flex flex-col items-end rounded-lg border border-neutral-300 bg-neutral-50 px-5 py-2.5 shadow-xs">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Aggregate Coverage</span>
+        <span class="text-3xl font-extrabold leading-tight text-primary select-all">{{ store.aggregateCoverage().toFixed(1) }}%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div class="flex h-28 cursor-default flex-col justify-between rounded-lg border border-neutral-300 bg-white p-4.5 shadow-xs transition-all hover:border-secondary">
+      <div class="flex items-start justify-between"><lucide-icon name="layers" class="h-5 w-5 text-secondary"></lucide-icon><span class="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500">80%</span></div>
+      <div><div class="text-xs font-semibold text-neutral-400">Operator Coverage</div><div class="mt-0.5 text-xl font-bold text-neutral-900">12 / 15</div></div>
+    </div>
+    <div class="flex h-28 cursor-default flex-col justify-between rounded-lg border border-neutral-300 bg-white p-4.5 shadow-xs transition-all hover:border-secondary">
+      <div class="flex items-start justify-between"><lucide-icon name="activity" class="h-5 w-5 text-secondary"></lucide-icon><span class="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500">83%</span></div>
+      <div><div class="text-xs font-semibold text-neutral-400">Namespace Coverage</div><div class="mt-0.5 text-xl font-bold text-neutral-900">5 / 6</div></div>
+    </div>
+    <div class="flex h-28 cursor-default flex-col justify-between rounded-lg border border-neutral-300 bg-white p-4.5 shadow-xs transition-all hover:border-secondary">
+      <div class="flex items-start justify-between"><lucide-icon name="award" class="h-5 w-5 text-secondary"></lucide-icon><span class="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500">80%</span></div>
+      <div><div class="text-xs font-semibold text-neutral-400">Boundary Case Coverage</div><div class="mt-0.5 text-xl font-bold text-neutral-900">8 / 10</div></div>
+    </div>
+    <div class="flex h-28 cursor-default flex-col justify-between rounded-lg border border-neutral-300 bg-white p-4.5 shadow-xs transition-all hover:border-secondary">
+      <div class="flex items-start justify-between"><lucide-icon name="octagon-alert" class="h-5 w-5 animate-pulse text-red-500"></lucide-icon><span class="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500">66%</span></div>
+      <div><div class="text-xs font-semibold text-neutral-400">Failure Path Coverage</div><div class="mt-0.5 text-xl font-bold text-neutral-900">6 / 9</div></div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div class="flex flex-col justify-between rounded-lg border border-neutral-300 bg-white p-5 shadow-xs lg:col-span-2">
+      <div>
+        <div class="mb-5 flex items-center justify-between select-none">
+          <h3 class="text-sm font-bold text-neutral-800">Rule Logic Heatmap</h3>
+          <div class="flex items-center gap-4 text-[10px] font-semibold text-neutral-500">
+            <div class="flex items-center gap-1.5"><span class="h-3 w-3 rounded border border-red-200 bg-red-100"></span><span>0%</span></div>
+            <div class="flex items-center gap-1.5"><span class="h-3 w-3 rounded bg-primary"></span><span>100%</span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-8 gap-[6px] select-none sm:grid-cols-12">
+          <div *ngFor="let i of gridIndexes" (click)="selectCell(i)" class="aspect-square cursor-pointer rounded-[3px] transition-all hover:scale-[1.15] hover:z-20" [ngClass]="[cellClasses(i), activeCellIndex() === i ? 'ring-2 ring-neutral-900 ring-offset-1 scale-110' : '']" [title]="cellTitle(i)"></div>
+        </div>
+      </div>
+
+      <div class="mt-8 border-t border-neutral-200/80 pt-5">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <h4 class="mb-2.5 flex items-center gap-2 text-xs font-bold text-neutral-800"><span class="h-2 w-2 shrink-0 rounded-full bg-fidelity-green-bright"></span>Most Accessed Node (Constant hit)</h4>
+            <div class="rounded border border-neutral-200 bg-neutral-50 p-3 font-mono text-xs leading-relaxed"><span class="font-bold text-primary">rule.eligibility.age_check</span><div class="mt-1.5 text-[11px] text-neutral-500">Calls: 14,290 | Coverage: 100%</div></div>
+          </div>
+          <div>
+            <h4 class="mb-2.5 flex items-center gap-2 text-xs font-bold text-neutral-800"><span class="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600"></span>Active Node Inspector (Focused block)</h4>
+            <div class="rounded border p-3 font-mono text-xs leading-relaxed" [ngClass]="cellDetails().status === 'CRITICAL GAP' || cellDetails().coverage < 20 ? 'border-red-200 bg-red-50' : 'border-neutral-200 bg-neutral-50'">
+              <span [ngClass]="cellDetails().status === 'CRITICAL GAP' || cellDetails().coverage < 20 ? 'font-bold text-red-600' : 'font-bold text-primary'">{{ cellDetails().name }}</span>
+              <div class="mt-1.5 text-[11px] text-neutral-500">Calls: {{ cellDetails().calls.toLocaleString() }} | Coverage: {{ cellDetails().coverage }}%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col justify-between overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+      <div>
+        <div class="border-b border-neutral-200 bg-neutral-50 p-5">
+          <h3 class="text-sm font-bold leading-none text-neutral-800">Uncovered Scenarios</h3>
+          <p class="mt-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">Prioritized risk vectors lacking logical test cases</p>
+        </div>
+        <div class="max-h-96 divide-y divide-neutral-200 overflow-y-auto">
+          <div *ngIf="!scenarios().length" class="p-6 text-center text-xs font-medium text-neutral-400">✨ Excellent work! Zero uncovered test paths detected. Coverage is saturated.</div>
+          <div *ngFor="let scenario of scenarios()" class="p-4 transition-colors hover:bg-neutral-50/50">
+            <div class="mb-1.5 flex items-center gap-2"><span class="rounded px-2 py-0.5 text-[9px] font-bold" [ngClass]="scenario.risk === 'HIGH RISK' ? 'bg-red-100 font-semibold text-red-700' : 'bg-neutral-100 text-neutral-600'">{{ scenario.risk }}</span><span class="font-mono text-[10px] text-neutral-400">ID: {{ scenario.id }}</span></div>
+            <div class="mb-1 text-xs font-semibold leading-snug text-neutral-850">{{ scenario.title }}</div>
+            <p class="text-[11px] leading-normal text-neutral-400">{{ scenario.description }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="border-t border-neutral-200 bg-neutral-50 p-4"><button type="button" (click)="autoGenerateAll()" class="w-full rounded bg-secondary py-2 text-xs font-bold text-white transition-all hover:opacity-95">Auto-Generate Tests for All</button></div>
+    </div>
+  </div>
+
+  <section class="mt-4 overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+    <div class="flex shrink-0 items-center justify-between border-b border-neutral-300 bg-neutral-50 p-4.5 select-none">
+      <h3 class="text-sm font-bold leading-tight text-neutral-800">Detailed Breakdown</h3>
+      <div class="flex gap-0.5 rounded border border-neutral-300 bg-neutral-200/50 p-0.5">
+        <button type="button" (click)="setBreakdown('namespace')" class="rounded px-3 py-1 text-xs font-semibold leading-none transition-all" [ngClass]="activeBreakdownTab() === 'namespace' ? 'bg-white text-neutral-800' : 'text-neutral-500 hover:text-neutral-900'">By Namespace</button>
+        <button type="button" (click)="setBreakdown('operator')" class="rounded px-3 py-1 text-xs font-semibold leading-none transition-all" [ngClass]="activeBreakdownTab() === 'operator' ? 'bg-white text-neutral-800' : 'text-neutral-500 hover:text-neutral-900'">By Operator</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-left">
+        <thead>
+          <tr class="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            <th class="p-4 pl-6">{{ activeBreakdownTab() === 'namespace' ? 'Namespace' : 'Logical Operator' }}</th>
+            <th class="p-4">Rules Count</th>
+            <th class="p-4">Paths Executed</th>
+            <th class="w-72 p-4">Coverage Status</th>
+            <th class="p-4 pr-6 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-200 font-sans text-xs text-neutral-700">
+          <ng-container *ngIf="activeBreakdownTab() === 'namespace'; else operatorRows">
+            <tr class="hover:bg-neutral-50/50"><td class="p-4 pl-6 font-mono font-bold text-neutral-800">user.profile</td><td class="p-4">12</td><td class="p-4">48 / 48</td><td class="p-4"><div class="flex items-center gap-3"><div class="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200"><div class="h-full bg-primary" style="width: 100%"></div></div><span class="w-10 text-right font-bold text-neutral-900">100%</span></div></td><td class="p-4 pr-6 text-right"><button type="button" (click)="store.showToast('Inspecting child nodes in user.profile namespace.')" class="bg-transparent text-xs font-bold text-secondary hover:underline">View Nodes</button></td></tr>
+            <tr class="hover:bg-neutral-50/50"><td class="p-4 pl-6 font-mono font-bold text-neutral-800">campaign.metadata</td><td class="p-4">24</td><td class="p-4">82 / 96</td><td class="p-4"><div class="flex items-center gap-3"><div class="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200"><div class="h-full bg-primary" style="width: 85%"></div></div><span class="w-10 text-right font-bold text-neutral-900">85%</span></div></td><td class="p-4 pr-6 text-right"><button type="button" (click)="store.showToast('Inspecting child nodes in campaign.metadata namespace.')" class="bg-transparent text-xs font-bold text-secondary hover:underline">View Nodes</button></td></tr>
+            <tr class="hover:bg-neutral-50/50"><td class="p-4 pl-6 font-mono font-bold text-neutral-800">transaction.history</td><td class="p-4">18</td><td class="p-4">12 / 54</td><td class="p-4"><div class="flex items-center gap-3"><div class="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200"><div class="h-full bg-red-600" style="width: 22%"></div></div><span class="w-10 text-right font-bold text-red-600">22%</span></div></td><td class="p-4 pr-6 text-right"><button type="button" (click)="store.showToast('Error log: AST mapping lacks transaction coverage. Expand required branch.')" class="bg-transparent text-xs font-bold text-secondary hover:underline">View Nodes</button></td></tr>
+          </ng-container>
+          <ng-template #operatorRows>
+            <tr class="hover:bg-neutral-50/50"><td class="p-4 pl-6 font-mono font-bold text-neutral-800">Inclusion (==, &gt;=, contains)</td><td class="p-4 font-semibold">14</td><td class="p-4">42 / 45</td><td class="p-4"><div class="flex items-center gap-3"><div class="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200"><div class="h-full bg-primary" style="width: 93.3%"></div></div><span class="w-10 text-right font-bold text-neutral-900">93%</span></div></td><td class="p-4 pr-6 text-right"><button type="button" (click)="store.showToast('Inspecting equality operation nodes.')" class="bg-transparent text-xs font-bold text-secondary hover:underline">View Nodes</button></td></tr>
+            <tr class="hover:bg-neutral-50/50"><td class="p-4 pl-6 font-mono font-bold text-neutral-800">Exclusion (!=, not)</td><td class="p-4 font-semibold">6</td><td class="p-4">4 / 8</td><td class="p-4"><div class="flex items-center gap-3"><div class="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200"><div class="h-full bg-red-600" style="width: 50%"></div></div><span class="w-10 text-right font-bold text-red-600">50%</span></div></td><td class="p-4 pr-6 text-right"><button type="button" (click)="store.showToast('Inspecting exclusive operation nodes.')" class="bg-transparent text-xs font-bold text-secondary hover:underline">View Nodes</button></td></tr>
+          </ng-template>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

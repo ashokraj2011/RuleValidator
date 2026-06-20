@@ -1,0 +1,51 @@
+<ng-template #nodeTemplate let-node let-depth="depth" let-path="path">
+  <ng-container *ngIf="isGroup(node); else leafTemplate">
+    <div class="flex flex-col gap-2">
+      <div
+        (click)="toggle(path)"
+        class="flex cursor-pointer select-none items-center gap-2.5 rounded border-l-4 px-3 py-2 transition-colors hover:opacity-80"
+        [ngClass]="[bgColor(node.status), borderColor(node.status)]"
+      >
+        <lucide-icon
+          [name]="isExpanded(path) ? 'chevron-down' : 'chevron-right'"
+          class="h-4 w-4 text-neutral-500"
+        ></lucide-icon>
+        <span class="font-bold text-neutral-800">{{ node.expression }}</span>
+        <span class="ml-auto font-bold" [ngClass]="statusColor(node.status)">[{{ node.status }}]</span>
+      </div>
+
+      <div *ngIf="isExpanded(path)" class="ml-5 space-y-2 border-l border-neutral-300 pl-4 pt-1">
+        <ng-container *ngFor="let child of node.children; index as i">
+          <ng-container
+            *ngTemplateOutlet="nodeTemplate; context: { $implicit: child, depth: depth + 1, path: path + '-' + i }"
+          ></ng-container>
+        </ng-container>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-template #leafTemplate>
+    <div
+      (click)="select(path)"
+      class="relative flex cursor-pointer select-none items-center gap-3 rounded border p-3 transition-all"
+      [ngClass]="leafClasses(node, path)"
+    >
+      <lucide-icon
+        [name]="node.status === 'PASSED' ? 'circle-check' : node.status === 'FAILED' ? 'triangle-alert' : 'circle-minus'"
+        class="h-4.5 w-4.5 shrink-0"
+        [ngClass]="statusColor(node.status)"
+      ></lucide-icon>
+      <div class="flex flex-1 items-center justify-between pr-1">
+        <span class="text-xs font-bold text-neutral-800">{{ node.expression }}</span>
+        <div class="flex items-center gap-4 text-[11px]">
+          <span class="text-neutral-400">
+            Actual: <span class="font-bold" [ngClass]="statusColor(node.status)">{{ node.actual | json }}</span>
+          </span>
+          <span class="font-bold" [ngClass]="statusColor(node.status)">[{{ node.status }}]</span>
+        </div>
+      </div>
+    </div>
+  </ng-template>
+</ng-template>
+
+<ng-container *ngTemplateOutlet="nodeTemplate; context: { $implicit: result, depth: depth, path: '0' }"></ng-container>

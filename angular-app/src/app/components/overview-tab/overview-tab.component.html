@@ -1,0 +1,215 @@
+<div class="space-y-6">
+  <div class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight text-neutral-900">Validation Dashboard</h1>
+      <p class="mt-1 text-sm text-neutral-500">
+        Monitoring eligibility logic for <span class="font-semibold text-primary">CrossSellCampaignEligibility v12</span>
+        <span *ngIf="store.isOptimized()" class="ml-[6px] rounded border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold uppercase text-fidelity-green-bright">Optimized</span>
+      </p>
+    </div>
+    <div class="flex shrink-0 flex-wrap gap-2">
+      <button type="button" (click)="store.showToast('Diff Tool loaded: Version 12 vs Production Base. Zero logic drift detected.')" class="flex items-center gap-2 rounded border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50">
+        <lucide-icon name="diff" class="h-4 w-4 text-neutral-500"></lucide-icon>
+        Compare Versions
+      </button>
+      <button type="button" (click)="switchToGenerated()" class="flex items-center gap-2 rounded border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50">
+        <lucide-icon name="sparkles" class="h-4 w-4 text-primary"></lucide-icon>
+        Generate System Tests
+      </button>
+      <button type="button" (click)="runValidation()" [disabled]="isRunningValidation()" class="flex items-center gap-2 rounded bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-green-900/10 transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+        <lucide-icon name="play" class="h-4 w-4 fill-current" [class.animate-spin]="isRunningValidation()"></lucide-icon>
+        {{ isRunningValidation() ? 'Executing...' : 'Run Validation' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="flex h-28 flex-col justify-between rounded-lg border border-neutral-300 bg-white p-5 shadow-sm">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Rule Status</span>
+        <span class="rounded-full bg-green-50 p-1 text-fidelity-green-bright">
+          <lucide-icon name="circle-check" class="h-4 w-4 fill-current text-white"></lucide-icon>
+        </span>
+      </div>
+      <div class="mt-1">
+        <div class="flex items-center gap-2">
+          <span class="absolute h-2.5 w-2.5 animate-ping rounded-full bg-fidelity-green-bright"></span>
+          <span class="relative h-2.5 w-2.5 rounded-full bg-fidelity-green-bright"></span>
+          <span class="text-xl font-bold text-neutral-900">{{ store.ruleStatus() }}</span>
+        </div>
+        <p class="mt-0.5 text-[10px] text-neutral-500">Live index • Production branch</p>
+      </div>
+    </div>
+
+    <div class="flex h-28 flex-col justify-between rounded-lg border border-neutral-300 bg-white p-5 shadow-sm">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Total Test Cases</span>
+        <lucide-icon name="archive" class="h-4 w-4 text-primary/60"></lucide-icon>
+      </div>
+      <div class="mt-1">
+        <div class="text-xl font-bold text-neutral-900">{{ activeTabSub() === 'system' ? systemCases().length + 138 : userCases().length + 20 }}</div>
+        <p class="mt-0.5 text-[10px] text-neutral-500">+12 added since version checkout</p>
+      </div>
+    </div>
+
+    <div class="flex h-28 flex-col justify-between rounded-lg border border-neutral-300 bg-white p-5 shadow-sm">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Logic Coverage</span>
+        <lucide-icon name="trending-up" class="h-4 w-4 text-primary/60"></lucide-icon>
+      </div>
+      <div class="mt-1">
+        <div class="text-xl font-bold text-neutral-900">{{ store.isOptimized() ? '92.4%' : '88.0%' }}</div>
+        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
+          <div class="h-full bg-primary transition-all duration-1000" [style.width]="store.isOptimized() ? '92.4%' : '88.0%' "></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex h-28 flex-col justify-between rounded-lg border border-neutral-300 bg-white p-5 shadow-sm">
+      <div class="flex items-start justify-between">
+        <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Recent Failures</span>
+        <lucide-icon name="circle-alert" class="h-4 w-4 text-red-500/80"></lucide-icon>
+      </div>
+      <div class="mt-1">
+        <div class="text-xl font-bold text-red-600">3</div>
+        <p class="mt-0.5 text-[10px] text-neutral-500">Critical regressions isolated in sandbox</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="border-b border-neutral-300">
+    <div class="flex gap-6">
+      <button type="button" (click)="selectSubTab('system')" class="border-b-2 pb-2.5 text-sm font-bold transition-all" [ngClass]="activeTabSub() === 'system' ? 'border-primary text-primary' : 'border-transparent text-neutral-500 hover:text-primary'">System Test Cases</button>
+      <button type="button" (click)="selectSubTab('user')" class="border-b-2 pb-2.5 text-sm font-bold transition-all" [ngClass]="activeTabSub() === 'user' ? 'border-primary text-primary' : 'border-transparent text-neutral-500 hover:text-primary'">User Test Cases</button>
+    </div>
+  </div>
+
+  <div class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-sm">
+    <div class="flex flex-col items-start justify-between gap-3 border-b border-neutral-300 bg-neutral-50 p-4 sm:flex-row sm:items-center">
+      <h3 class="text-sm font-bold text-neutral-800">Recent Test Runs</h3>
+      <div class="flex w-full items-center gap-2 sm:w-auto">
+        <div class="relative flex-1 sm:w-56">
+          <lucide-icon name="search" class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400"></lucide-icon>
+          <input type="text" [ngModel]="searchQuery()" (ngModelChange)="updateSearch($event)" placeholder="Search cases..." class="w-full rounded border border-neutral-300 bg-white py-1.5 pr-3 pl-8 text-xs text-neutral-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+        </div>
+        <button type="button" (click)="store.showToast('Filters adjusted strictly to active version code.')" class="rounded border border-neutral-300 bg-white p-1.5 transition-colors hover:bg-neutral-100" title="Filter list">
+          <lucide-icon name="list-filter" class="h-3.5 w-3.5 text-neutral-600"></lucide-icon>
+        </button>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-left">
+        <thead>
+          <tr class="border-b border-neutral-300 bg-neutral-50/50">
+            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">Case Name</th>
+            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">Version</th>
+            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">Status</th>
+            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">Timestamp</th>
+            <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-200">
+          <tr *ngIf="!paginatedCases().length">
+            <td colspan="5" class="py-8 text-center text-sm text-neutral-500">No matching test cases found.</td>
+          </tr>
+          <tr *ngFor="let tc of paginatedCases()" class="group transition-colors hover:bg-neutral-50/50">
+            <td class="px-6 py-3.5">
+              <div class="flex items-center gap-3">
+                <lucide-icon [name]="tc.status === 'failed' ? 'bug' : 'file-text'" class="h-4 w-4 shrink-0" [ngClass]="tc.status === 'failed' ? 'text-red-500' : 'text-primary'"></lucide-icon>
+                <div>
+                  <div class="text-sm font-semibold text-neutral-800">{{ tc.name }}</div>
+                  <div class="text-[11px] text-neutral-400">{{ tc.description }}</div>
+                </div>
+              </div>
+            </td>
+            <td class="px-6 py-3.5 font-mono text-xs text-neutral-500">{{ tc.version }}</td>
+            <td class="px-6 py-3.5">
+              <span *ngIf="tc.status === 'passed'" class="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-tight text-emerald-700">
+                <lucide-icon name="circle-check" class="h-3 w-3 shrink-0 fill-current text-white text-emerald-600"></lucide-icon> Passed
+              </span>
+              <span *ngIf="tc.status === 'failed'" class="inline-flex items-center gap-1 rounded-full border border-red-100 bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-tight text-red-700">
+                <lucide-icon name="triangle-alert" class="h-3 w-3 shrink-0 text-red-600"></lucide-icon> Failed
+              </span>
+              <span *ngIf="tc.status === 'pending'" class="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-tight text-blue-700">
+                <lucide-icon name="clock" class="h-3 w-3 shrink-0 animate-spin text-blue-600"></lucide-icon> Pending
+              </span>
+            </td>
+            <td class="px-6 py-3.5 text-xs text-neutral-500">{{ tc.timestamp }}</td>
+            <td class="px-6 py-3.5 text-right">
+              <span *ngIf="tc.status === 'pending'" class="animate-pulse pr-1 text-xs font-medium italic text-neutral-400">Processing...</span>
+              <button *ngIf="tc.status !== 'pending'" type="button" (click)="viewExplanation(tc.id)" class="text-xs font-bold text-secondary decoration-2 underline-offset-4 hover:text-blue-800 hover:underline">View Explanation</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex items-center justify-between border-t border-neutral-300 bg-neutral-50 p-4 text-xs">
+      <span class="text-neutral-500">Showing {{ (currentPage() - 1) * casesPerPage + 1 }} to {{ Math.min(currentPage() * casesPerPage, filteredCases().length) }} of {{ filteredCases().length }} recent runs</span>
+      <div class="flex gap-1">
+        <button type="button" [disabled]="currentPage() === 1" (click)="currentPage.set(Math.max(currentPage() - 1, 1))" class="rounded border border-neutral-300 bg-white px-2 py-1 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-45">
+          <lucide-icon name="chevron-left" class="h-3.5 w-3.5 text-neutral-600"></lucide-icon>
+        </button>
+        <button *ngFor="let page of pageNumbers()" type="button" (click)="currentPage.set(page)" class="rounded px-3 py-1 text-xs font-bold leading-tight" [ngClass]="currentPage() === page ? 'border border-primary bg-primary font-semibold text-white' : 'border border-neutral-300 bg-white hover:bg-neutral-100'">{{ page }}</button>
+        <button type="button" [disabled]="currentPage() === totalPages()" (click)="currentPage.set(Math.min(currentPage() + 1, totalPages()))" class="rounded border border-neutral-300 bg-white px-2 py-1 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-45">
+          <lucide-icon name="chevron-right" class="h-3.5 w-3.5 text-neutral-600"></lucide-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div class="relative flex flex-col justify-between overflow-hidden rounded-lg border border-neutral-300 bg-white p-5 shadow-sm lg:col-span-2">
+      <div>
+        <h4 class="mb-4 text-sm font-bold uppercase tracking-tight text-neutral-800">Rule Logic Path Analysis</h4>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 p-3.5">
+            <div class="flex items-center gap-3">
+              <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-fidelity-green-bright"></span>
+              <span class="font-mono text-xs text-neutral-700">Customer_Type == &quot;PREMIUM&quot;</span>
+            </div>
+            <span class="font-mono text-xs font-bold text-neutral-500">84 Hits</span>
+          </div>
+          <div class="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 p-3.5">
+            <div class="flex items-center gap-3">
+              <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-fidelity-green-bright"></span>
+              <span class="font-mono text-xs text-neutral-700">Balance &gt; 50000.00</span>
+            </div>
+            <span class="font-mono text-xs font-bold text-neutral-500">12 Hits</span>
+          </div>
+          <div class="flex items-center justify-between rounded-md border border-red-200 bg-red-50/50 p-3.5">
+            <div class="flex items-center gap-3">
+              <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600"></span>
+              <span class="font-mono text-xs text-neutral-700">Account_Standing == &quot;ACTIVE&quot;</span>
+            </div>
+            <span class="font-mono text-xs font-bold text-red-600">3 Misses (Regression)</span>
+          </div>
+        </div>
+      </div>
+      <div class="mt-5 border-t border-neutral-200/65 pt-3">
+        <button type="button" (click)="store.activeTab.set('test-runs')" class="flex items-center gap-1.5 bg-transparent text-xs font-bold text-secondary underline-offset-4 hover:underline">
+          Explore Logical Tree <lucide-icon name="arrow-right" class="h-3.5 w-3.5 text-secondary"></lucide-icon>
+        </button>
+      </div>
+    </div>
+
+    <div class="relative flex flex-col justify-between overflow-hidden rounded-lg bg-primary p-5 text-white shadow-md">
+      <div class="pointer-events-none absolute top-0 right-0 p-4 opacity-15">
+        <lucide-icon name="sparkles" class="h-20 w-20 text-white"></lucide-icon>
+      </div>
+      <div>
+        <div class="mb-3 flex items-center gap-2">
+          <lucide-icon name="sparkles" class="h-4 w-4 text-emerald-300"></lucide-icon>
+          <span class="text-[10px] font-bold uppercase tracking-wider">AI Audit Intelligence</span>
+        </div>
+        <h4 class="mb-2 text-lg font-bold leading-tight">Optimize nested logic in v12</h4>
+        <p class="text-xs leading-relaxed text-green-100 opacity-90">
+          We've identified three redundant logical paths. Flattening these would increase execution speed by approximately
+          <span class="font-bold text-white underline">14%</span> based on current hit patterns.
+        </p>
+      </div>
+      <button type="button" (click)="applyOptimization()" class="mt-6 w-full rounded bg-white py-2.5 text-xs font-bold text-primary shadow-sm transition-colors hover:bg-green-50">Apply Optimization</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,121 @@
+<div class="flex min-h-0 flex-1 flex-col bg-neutral-100">
+  <div class="shrink-0 border-b border-neutral-300 bg-white p-5 shadow-xs">
+    <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+      <div class="flex items-center gap-4">
+        <div
+          class="flex items-center gap-2 rounded border px-4 py-2.5"
+          [ngClass]="evalResult().status === 'PASSED' ? 'border-green-200 bg-green-100/80 text-fidelity-green-bright' : 'border-red-200 bg-red-100/80 text-red-700'"
+        >
+          <lucide-icon [name]="evalResult().status === 'PASSED' ? 'circle-check' : 'octagon-x'" class="h-5 w-5"></lucide-icon>
+          <span class="text-xs font-bold uppercase tracking-wider">{{ evalResult().status }}</span>
+        </div>
+
+        <div>
+          <h1 class="text-base font-bold leading-tight text-neutral-900">{{ store.selectedRule().name }}</h1>
+          <p class="mt-0.5 text-xs text-neutral-500">
+            {{ counts().passed }}/{{ counts().total }} terms passed • {{ counts().failed }} failed
+          </p>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button
+          type="button"
+          (click)="runEvaluation()"
+          class="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold text-neutral-700 transition-colors hover:bg-neutral-50"
+        >
+          <lucide-icon name="circle-play" class="h-3.5 w-3.5"></lucide-icon>
+          Run Evaluation
+        </button>
+        <button
+          type="button"
+          (click)="switchToTestData()"
+          class="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-bold text-secondary transition-colors hover:bg-neutral-50"
+        >
+          <lucide-icon name="sliders-horizontal" class="h-3.5 w-3.5"></lucide-icon>
+          Edit Test Data
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid min-h-0 flex-1 grid-cols-12 gap-5 overflow-auto p-5 font-sans">
+    <section class="col-span-12 flex min-h-0 flex-col lg:col-span-7">
+      <div class="flex h-full flex-col overflow-hidden rounded-md border border-neutral-300 bg-white shadow-xs">
+        <div class="flex shrink-0 items-center justify-between border-b border-neutral-300 bg-neutral-50 px-4 py-3">
+          <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Evaluation Logic Tree</span>
+          <span class="text-[10px] font-bold uppercase text-neutral-400">{{ counts().total }} Terms Evaluated</span>
+        </div>
+        <div class="flex-1 overflow-auto p-5 font-mono text-xs">
+          <app-eval-node
+            [result]="evalResult()"
+            [activeNodeId]="activeNodeId()"
+            (nodeSelected)="onNodeSelected($event)"
+          ></app-eval-node>
+        </div>
+      </div>
+    </section>
+
+    <div class="col-span-12 flex min-h-0 flex-col gap-5 overflow-hidden lg:col-span-5">
+      <section class="flex shrink-0 flex-col rounded-md border border-neutral-300 bg-white shadow-xs">
+        <div class="flex items-center gap-2 border-b border-neutral-300 bg-neutral-50 px-4 py-2.5">
+          <lucide-icon name="code" class="h-4 w-4 shrink-0 text-secondary"></lucide-icon>
+          <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Term Breakdown</span>
+        </div>
+        <div class="p-4">
+          <div *ngIf="selectedNode() as node; else emptyState" class="rounded-r border-l-4 p-4"
+            [ngClass]="node.status === 'PASSED' ? 'border-primary bg-green-50/40' : node.status === 'FAILED' ? 'border-red-600 bg-red-50/30' : 'border-neutral-300 bg-neutral-50/60'"
+          >
+            <h4 class="mb-1 text-[10px] font-bold uppercase"
+              [ngClass]="node.status === 'PASSED' ? 'text-primary' : node.status === 'FAILED' ? 'text-red-700' : 'text-neutral-500'"
+            >
+              {{ node.status }} TERM
+            </h4>
+            <p class="break-words font-mono text-xs font-bold text-neutral-800">{{ node.expression }}</p>
+
+            <div class="mt-4 grid grid-cols-2 gap-3 font-mono text-xs">
+              <div class="rounded border border-neutral-200 bg-white p-2.5">
+                <span class="mb-1 block text-[9px] font-bold uppercase text-neutral-400">Expected</span>
+                <span class="text-[11px] font-bold text-neutral-800">{{ node.expected | json }}</span>
+              </div>
+              <div class="rounded border p-2.5"
+                [ngClass]="node.status === 'PASSED' ? 'border-green-200 bg-green-50/60' : node.status === 'FAILED' ? 'border-red-200 bg-red-50/60' : 'border-neutral-200 bg-neutral-50'"
+              >
+                <span class="mb-1 block text-[9px] font-bold uppercase"
+                  [ngClass]="node.status === 'PASSED' ? 'text-primary' : node.status === 'FAILED' ? 'text-red-700' : 'text-neutral-500'"
+                >Actual</span>
+                <span class="text-[11px] font-bold"
+                  [ngClass]="node.status === 'PASSED' ? 'text-primary' : node.status === 'FAILED' ? 'text-red-700' : 'text-neutral-700'"
+                >{{ node.actual | json }}</span>
+              </div>
+            </div>
+
+            <div *ngIf="node.namespace" class="mt-3 text-[10px] text-neutral-400">
+              Namespace: <span class="font-bold text-neutral-600">{{ node.namespace }}</span>
+              • Attribute: <span class="font-bold text-neutral-600">{{ node.attribute }}</span>
+            </div>
+          </div>
+
+          <ng-template #emptyState>
+            <div class="py-8 text-center text-xs text-neutral-400">
+              <lucide-icon name="circle-play" class="mx-auto mb-2 h-8 w-8 opacity-40"></lucide-icon>
+              Click a term in the tree to inspect details
+            </div>
+          </ng-template>
+        </div>
+      </section>
+
+      <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-300 bg-white shadow-xs">
+        <div class="flex shrink-0 items-center justify-between border-b border-neutral-300 bg-neutral-50 px-4 py-2.5">
+          <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Test Data Snapshot</span>
+          <button type="button" class="text-xs font-bold text-primary hover:underline" (click)="copySnapshot()">
+            {{ isCopied() ? 'COPIED!' : 'COPY JSON' }}
+          </button>
+        </div>
+        <div class="flex-1 select-text overflow-auto bg-[#141414] p-4 font-mono text-xs leading-5 text-[#d4d4d4]">
+          <pre>{{ snapshotJson() }}</pre>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>

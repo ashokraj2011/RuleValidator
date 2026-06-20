@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-primary: #216308;
+  --color-secondary: #255dad;
+  --color-fidelity-green-bright: #368727;
+  --color-background: #fcf9f8;
+  --color-neutral-55: #fafafa;
+  --color-neutral-150: #ececec;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-250: #d9d9d9;
+  --color-neutral-850: #1c1b1b;
+  --color-neutral-905: #111827;
+
+  --size-container-max: 1400px;
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+
+  .animate-scale-up {
+    animation: scale-up 0.2s ease-out;
+  }
+
+  .shadow-xs {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+  }
+
+  .shadow-2xs {
+    box-shadow: 0 1px 1px rgb(15 23 42 / 0.06);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-up {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: #fcf9f8;
+  color: #1c1b1b;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}

@@ -1,0 +1,231 @@
+<div class="flex min-h-0 flex-1 flex-col">
+  <div class="h-14 shrink-0 rounded-t-lg border border-neutral-300 border-b bg-white px-5">
+    <div class="flex h-full items-center justify-between">
+      <div class="flex items-center gap-3">
+        <lucide-icon name="database" class="h-4.5 w-4.5 text-primary"></lucide-icon>
+        <div>
+          <span class="text-sm font-bold text-neutral-800">Test Data — </span>
+          <span class="text-sm font-bold text-primary">{{ store.selectedRule().name }}</span>
+        </div>
+        <span class="ml-2 rounded bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-secondary">
+          {{ namespaces().length }} Namespace{{ namespaces().length !== 1 ? 's' : '' }}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="saveSnapshot()"
+          class="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-neutral-50"
+        >
+          <lucide-icon name="save" class="h-3.5 w-3.5 text-neutral-500"></lucide-icon>
+          Save Snapshot
+        </button>
+        <button
+          type="button"
+          (click)="evaluateRule()"
+          class="flex items-center gap-1.5 rounded bg-primary px-4 py-1.5 text-xs font-bold text-white transition-all hover:opacity-90"
+        >
+          <lucide-icon name="circle-play" class="h-3.5 w-3.5"></lucide-icon>
+          Evaluate Rule
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-4 flex min-h-0 flex-1 gap-5 overflow-hidden">
+    <div class="flex-1 space-y-4 overflow-y-auto pr-1">
+      <div *ngFor="let namespace of namespaces()" class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+        <div
+          class="flex cursor-pointer select-none items-center justify-between border-b border-neutral-300 bg-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-100"
+          (click)="toggleNamespace(namespace)"
+        >
+          <div class="flex items-center gap-3">
+            <lucide-icon [name]="isExpanded(namespace) ? 'chevron-down' : 'chevron-right'" class="h-4 w-4 text-neutral-500"></lucide-icon>
+            <lucide-icon name="layers" class="h-4 w-4 text-secondary"></lucide-icon>
+            <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">{{ namespace }}</span>
+            <span class="font-mono text-[10px] text-neutral-400">[{{ attrsFor(namespace).join(', ') }}]</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <span *ngIf="hasData(namespace) && !hasError(namespace)" class="flex items-center gap-1 text-[10px] font-bold text-fidelity-green-bright">
+              <lucide-icon name="circle-check" class="h-3.5 w-3.5"></lucide-icon>
+              {{ getConfig(namespace)?.isEdited ? 'EDITED' : 'FETCHED' }}
+            </span>
+            <span *ngIf="hasError(namespace)" class="flex items-center gap-1 text-[10px] font-bold text-red-600">
+              <lucide-icon name="triangle-alert" class="h-3.5 w-3.5"></lucide-icon>
+              JSON ERROR
+            </span>
+            <span *ngIf="!hasData(namespace) && !hasError(namespace)" class="flex items-center gap-1 text-[10px] font-bold text-amber-600">
+              <lucide-icon name="info" class="h-3.5 w-3.5"></lucide-icon>
+              NO DATA
+            </span>
+          </div>
+        </div>
+
+        <div *ngIf="isExpanded(namespace)" class="space-y-3 p-4">
+          <div class="flex items-end gap-3">
+            <div class="flex-1">
+              <label class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">DB Lookup Key</label>
+              <div class="flex items-center gap-2">
+                <div class="relative flex-1">
+                  <lucide-icon name="search" class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400"></lucide-icon>
+                  <input
+                    type="text"
+                    [ngModel]="getConfig(namespace)?.dbKey || ''"
+                    (ngModelChange)="updateDbKey(namespace, $event)"
+                    [placeholder]="getAvailableKeys(namespace).length ? 'e.g. ' + getAvailableKeys(namespace)[0] : 'Enter ' + namespace + ' key...'"
+                    class="w-full rounded border border-neutral-300 py-2 pr-3 pl-8 text-xs font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    [attr.list]="'keys-' + namespace"
+                  />
+                  <datalist [id]="'keys-' + namespace">
+                    <option *ngFor="let key of getAvailableKeys(namespace)" [value]="key"></option>
+                  </datalist>
+                </div>
+                <button
+                  type="button"
+                  (click)="fetchNamespace(namespace)"
+                  [disabled]="isLoading(namespace)"
+                  class="flex items-center gap-1.5 rounded bg-secondary px-3 py-2 text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-50"
+                >
+                  <lucide-icon [name]="isLoading(namespace) ? 'refresh-cw' : 'download'" class="h-3.5 w-3.5" [class.animate-spin]="isLoading(namespace)"></lucide-icon>
+                  {{ isLoading(namespace) ? 'Fetching...' : 'Fetch' }}
+                </button>
+              </div>
+
+              <div *ngIf="getAvailableKeys(namespace).length" class="mt-1.5 flex flex-wrap gap-1">
+                <button
+                  *ngFor="let key of getAvailableKeys(namespace)"
+                  type="button"
+                  (click)="updateDbKey(namespace, key)"
+                  class="rounded border px-2 py-0.5 font-mono text-[10px] transition-colors"
+                  [ngClass]="getConfig(namespace)?.dbKey === key ? 'border-secondary bg-secondary text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-secondary hover:text-secondary'"
+                >
+                  {{ key }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between">
+              <label class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                <lucide-icon name="code" class="h-3.5 w-3.5"></lucide-icon>
+                Data Snapshot
+                <span *ngIf="getConfig(namespace)?.isEdited" class="normal-case text-amber-600">(edited — test grounded on this data)</span>
+              </label>
+              <span class="font-mono text-[10px] text-neutral-400">
+                {{ getJsonText(namespace) ? getJsonText(namespace).split('
+').length + ' lines' : 'empty' }}
+              </span>
+            </div>
+
+            <div class="relative">
+              <div class="flex overflow-hidden rounded border border-neutral-300">
+                <div class="w-8 shrink-0 select-none border-r border-neutral-200 bg-neutral-50 pt-3 pr-2 text-right font-mono text-[10px] text-neutral-400">
+                  <div *ngFor="let line of lineNumbers(getJsonText(namespace))" class="leading-5">{{ line }}</div>
+                </div>
+                <textarea
+                  class="min-h-[120px] flex-1 resize-none whitespace-pre border-none bg-white p-3 font-mono text-xs leading-5 text-neutral-800 outline-none ring-0"
+                  [ngModel]="getJsonText(namespace)"
+                  (ngModelChange)="onJsonEdit(namespace, $event)"
+                  placeholder="{&#10;  &quot;key&quot;: &quot;value&quot;&#10;}"
+                  spellcheck="false"
+                  [rows]="Math.max(5, getJsonText(namespace).split('
+').length)"
+                ></textarea>
+              </div>
+
+              <div *ngIf="jsonErrors()[namespace]" class="mt-1 flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-3 py-1.5 font-mono text-[10px] text-red-700">
+                <lucide-icon name="info" class="h-3.5 w-3.5 shrink-0"></lucide-icon>
+                {{ jsonErrors()[namespace] }}
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <span class="text-[10px] font-bold uppercase text-neutral-400">Used in rule:</span>
+            <span
+              *ngFor="let attr of attrsFor(namespace)"
+              class="rounded border px-2 py-0.5 font-mono text-[10px]"
+              [ngClass]="isAttributePresent(namespace, attr) ? 'border-green-200 bg-green-50 font-bold text-fidelity-green-bright' : 'border-amber-200 bg-amber-50 text-amber-700'"
+            >
+              {{ attr }}: {{ isAttributePresent(namespace, attr) ? (getConfig(namespace)?.data?.[attr] | json) : 'missing' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto xl:flex">
+      <div class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+        <div class="flex items-center gap-2 border-b border-neutral-300 bg-neutral-50 px-4 py-2.5">
+          <lucide-icon name="code" class="h-4 w-4 text-secondary"></lucide-icon>
+          <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Rule Definition</span>
+        </div>
+        <div class="max-h-[400px] overflow-auto bg-[#1e1e1e] p-3 font-mono text-[11px] leading-5 text-[#d4d4d4]">
+          <pre class="whitespace-pre-wrap">{{ store.selectedRule() | json }}</pre>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs" *ngIf="store.allRules().length > 1">
+        <div class="flex items-center gap-2 border-b border-neutral-300 bg-neutral-50 px-4 py-2.5">
+          <lucide-icon name="layers" class="h-4 w-4 text-secondary"></lucide-icon>
+          <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Chained Rules</span>
+        </div>
+        <div class="space-y-2 p-3">
+          <div
+            *ngFor="let rule of store.allRules()"
+            class="rounded border p-2 text-xs"
+            [ngClass]="rule.rule_id === store.selectedRule().rule_id ? 'border-primary bg-primary/10 font-bold text-primary' : 'border-neutral-200 bg-neutral-50 text-neutral-600'"
+          >
+            <span class="font-mono text-[10px] text-neutral-400">{{ rule.rule_id }}</span>
+            <div class="font-semibold">{{ rule.name }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+        <div class="border-b border-neutral-300 bg-neutral-50 px-4 py-2.5">
+          <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Data Readiness</span>
+        </div>
+        <div class="space-y-2 p-3">
+          <div *ngFor="let namespace of namespaces()" class="flex items-center justify-between text-xs">
+            <span class="font-mono font-bold text-neutral-700">{{ namespace }}</span>
+            <span *ngIf="hasData(namespace)" class="flex items-center gap-1 font-bold text-fidelity-green-bright">
+              <lucide-icon name="circle-check" class="h-3.5 w-3.5"></lucide-icon>
+              Ready
+            </span>
+            <span *ngIf="!hasData(namespace)" class="flex items-center gap-1 font-bold text-amber-600">
+              <lucide-icon name="triangle-alert" class="h-3.5 w-3.5"></lucide-icon>
+              Needs data
+            </span>
+          </div>
+          <div class="mt-2 border-t border-neutral-200 pt-2">
+            <div class="flex items-center justify-between text-xs font-bold">
+              <span class="text-neutral-600">Overall</span>
+              <span [ngClass]="allNamespacesReady() ? 'text-fidelity-green-bright' : 'text-amber-600'">
+                {{ allNamespacesReady() ? '✓ Ready to evaluate' : '⚠ Incomplete' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="flex h-8 shrink-0 items-center justify-between rounded-b-lg border-x border-t border-neutral-300 bg-neutral-100 px-6 text-[10px] font-sans text-neutral-500">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-1.5">
+        <span class="h-2 w-2 shrink-0 rounded-full" [ngClass]="allNamespacesReady() ? 'bg-fidelity-green-bright' : 'bg-amber-500'"></span>
+        <span class="font-bold uppercase tracking-wider text-neutral-600">
+          {{ allNamespacesReady() ? 'All Namespaces Ready' : 'Data Incomplete' }}
+        </span>
+      </div>
+    </div>
+    <div class="flex items-center gap-4 font-semibold text-neutral-600">
+      <span>Rule: <b class="text-primary">{{ store.selectedRule().rule_id }}</b></span>
+      <span>Namespaces: <b>{{ namespaces().join(', ') }}</b></span>
+    </div>
+  </div>
+</div>
