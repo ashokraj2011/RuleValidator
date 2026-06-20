@@ -7,10 +7,9 @@ import { MockDbService } from '../../services/mock-db.service';
 import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 
-interface TableRow {
+interface GridRow {
   id: number;
-  key: string;
-  valueText: string;
+  cells: Record<string, string>;
 }
 
 @Component({
@@ -37,10 +36,13 @@ export class TestDataTabComponent {
   readonly editingJson = signal<Record<string, string>>({});
   readonly jsonErrors = signal<Record<string, string>>({});
 
-  // Per-namespace editor view: 'table' (field rows) or 'json'
+  // Per-namespace editor view: 'table' (spreadsheet grid) or 'json'
   readonly viewModes = signal<Record<string, 'table' | 'json'>>({});
-  // Per-namespace table draft rows (key/value pairs being edited)
-  readonly tableDrafts = signal<Record<string, TableRow[]>>({});
+  // Spreadsheet grid state: columns (attributes) + rows (records) per namespace
+  readonly gridColumns = signal<Record<string, string[]>>({});
+  readonly gridRows = signal<Record<string, GridRow[]>>({});
+  readonly activeRowId = signal<Record<string, number>>({});
+  readonly newColumnName = signal<Record<string, string>>({});
   private rowSeq = 0;
 
   // Save as Test Case modal
@@ -69,7 +71,9 @@ export class TestDataTabComponent {
     const nextConfigs: Record<string, NamespaceConfig> = {};
     const nextEditing = { ...this.editingJson() };
     const nextModes = { ...this.viewModes() };
-    const nextDrafts = { ...this.tableDrafts() };
+    const nextColumns = { ...this.gridColumns() };
+    const nextRows = { ...this.gridRows() };
+    const nextActive = { ...this.activeRowId() };
 
     for (const namespace of namespaces) {
       const existing = currentConfigs[namespace];
@@ -85,15 +89,39 @@ export class TestDataTabComponent {
         nextEditing[namespace] = JSON.stringify(data, null, 2);
       }
       nextModes[namespace] ??= 'table';
-      nextDrafts[namespace] = this.buildDraft(nextConfigs[namespace].data);
+
+      if (!nextColumns[namespace]) {
+        const records = Object.keys(data).length ? [data] : [];
+        const cols = this.buildColumns(namespace, records);
+        const rows: GridRow[] = records.map((r) => ({ id: this.rowSeq++, cells: this.recordToCells(cols, r) }));
+        if (!rows.length) rows.push({ id: this.rowSeq++, cells: this.emptyCells(cols) });
+        nextColumns[namespace] = cols;
+        nextRows[namespace] = rows;
+        nextActive[namespace] = rows[0].id;
+      }
     }
 
     this.namespaceConfigs.set(nextConfigs);
     this.editingJson.set(nextEditing);
     this.viewModes.set(nextModes);
-    this.tableDrafts.set(nextDrafts);
+    this.gridColumns.set(nextColumns);
+    this.gridRows.set(nextRows);
+    this.activeRowId.set(nextActive);
     this.jsonErrors.set({});
     this.expandedNamespaces.set(new Set(namespaces));
+
+    // Restore active grid records into the store so readiness/evaluation stay in sync
+    const restored = { ...this.store.testData() };
+    const restoredConfigs = { ...this.namespaceConfigs() };
+    for (const namespace of namespaces) {
+      const record = this.activeRecord(namespace);
+      if (Object.keys(record).length) {
+        restored[namespace] = record;
+        restoredConfigs[namespace] = { ...restoredConfigs[namespace], data: record, isFetched: true };
+      }
+    }
+    this.store.testData.set(restored);
+    this.namespaceConfigs.set(restoredConfigs);
   }
 
   // --- Editor view toggle (table <-> json) ---
@@ -104,27 +132,15 @@ export class TestDataTabComponent {
 
   setViewMode(namespace: string, mode: 'table' | 'json') {
     if (this.viewMode(namespace) === mode) return;
-    const data = this.namespaceConfigs()[namespace]?.data ?? {};
-    if (mode === 'table') {
-      // Rebuild table rows from current data so it reflects JSON edits
-      this.tableDrafts.update((drafts) => ({ ...drafts, [namespace]: this.buildDraft(data) }));
-    } else {
-      // Rebuild JSON text from current data so it reflects table edits
+    if (mode === 'json') {
+      const data = this.activeRecord(namespace);
       this.editingJson.update((current) => ({ ...current, [namespace]: JSON.stringify(data, null, 2) }));
       this.jsonErrors.update((current) => { const next = { ...current }; delete next[namespace]; return next; });
     }
     this.viewModes.update((modes) => ({ ...modes, [namespace]: mode }));
   }
 
-  // --- Table editing ---
-
-  private buildDraft(data: NamespaceData): TableRow[] {
-    return Object.entries(data ?? {}).map(([key, value]) => ({
-      id: this.rowSeq++,
-      key,
-      valueText: this.valueToText(value),
-    }));
-  }
+  // --- Value typing helpers ---
 
   private valueToText(value: any): string {
     if (typeof value === 'string') return value;
@@ -145,58 +161,178 @@ export class TestDataTabComponent {
     return text;
   }
 
-  tableRows(namespace: string): TableRow[] {
-    return this.tableDrafts()[namespace] ?? [];
-  }
-
-  rowValueType(row: TableRow): string {
-    const v = this.textToValue(row.valueText);
+  private typeOfText(text: string): string {
+    if (text === undefined || text.trim() === '') return 'empty';
+    const v = this.textToValue(text);
     if (Array.isArray(v)) return 'array';
     if (v === null) return 'null';
+    if (typeof v === 'object') return 'object';
     return typeof v;
   }
 
-  updateRowKey(namespace: string, id: number, key: string) {
-    this.tableDrafts.update((drafts) => ({
-      ...drafts,
-      [namespace]: (drafts[namespace] ?? []).map((r) => (r.id === id ? { ...r, key } : r)),
-    }));
-    this.commitDraft(namespace);
+  // --- Grid construction ---
+
+  private buildColumns(namespace: string, records: NamespaceData[]): string[] {
+    const cols: string[] = [];
+    const add = (c: string) => { if (c && !cols.includes(c)) cols.push(c); };
+    add('id');
+    this.attrsFor(namespace).forEach(add);
+    records.forEach((r) => Object.keys(r).forEach(add));
+    return cols;
   }
 
-  updateRowValue(namespace: string, id: number, valueText: string) {
-    this.tableDrafts.update((drafts) => ({
-      ...drafts,
-      [namespace]: (drafts[namespace] ?? []).map((r) => (r.id === id ? { ...r, valueText } : r)),
-    }));
-    this.commitDraft(namespace);
+  private recordToCells(cols: string[], record: NamespaceData): Record<string, string> {
+    const cells: Record<string, string> = {};
+    for (const col of cols) cells[col] = this.valueToText(record[col]);
+    return cells;
   }
 
-  addRow(namespace: string) {
-    if (!this.isExpanded(namespace)) this.expandedNamespaces.update((s) => new Set(s).add(namespace));
-    this.tableDrafts.update((drafts) => ({
-      ...drafts,
-      [namespace]: [...(drafts[namespace] ?? []), { id: this.rowSeq++, key: '', valueText: '' }],
-    }));
+  private emptyCells(cols: string[]): Record<string, string> {
+    const cells: Record<string, string> = {};
+    for (const col of cols) cells[col] = '';
+    return cells;
   }
 
-  removeRow(namespace: string, id: number) {
-    this.tableDrafts.update((drafts) => ({
-      ...drafts,
-      [namespace]: (drafts[namespace] ?? []).filter((r) => r.id !== id),
-    }));
-    this.commitDraft(namespace);
-  }
-
-  /** Rebuild the namespace data object from its table rows and sync everywhere. */
-  private commitDraft(namespace: string) {
-    const rows = this.tableDrafts()[namespace] ?? [];
-    const data: NamespaceData = {};
-    for (const row of rows) {
-      const key = row.key.trim();
-      if (!key) continue;
-      data[key] = this.textToValue(row.valueText);
+  private cellsToRecord(cols: string[], cells: Record<string, string>): NamespaceData {
+    const record: NamespaceData = {};
+    for (const col of cols) {
+      const text = cells[col];
+      if (text === undefined || text.trim() === '') continue;
+      record[col] = this.textToValue(text);
     }
+    return record;
+  }
+
+  // --- Grid accessors ---
+
+  columnsFor(namespace: string): string[] { return this.gridColumns()[namespace] ?? []; }
+  rowsFor(namespace: string): GridRow[] { return this.gridRows()[namespace] ?? []; }
+
+  primaryKey(namespace: string): string {
+    const cols = this.columnsFor(namespace);
+    return cols.includes('id') ? 'id' : (cols[0] ?? 'id');
+  }
+
+  isPrimaryKey(namespace: string, col: string): boolean { return col === this.primaryKey(namespace); }
+
+  /** Datatype shared by a column's cells (for header tooltip). */
+  columnType(namespace: string, col: string): string {
+    for (const row of this.rowsFor(namespace)) {
+      const t = this.typeOfText(row.cells[col]);
+      if (t !== 'empty') return t;
+    }
+    return 'empty';
+  }
+
+  cellType(row: GridRow, col: string): string { return this.typeOfText(row.cells[col]); }
+
+  cellValue(row: GridRow, col: string): string { return row.cells[col] ?? ''; }
+
+  isActiveRow(namespace: string, rowId: number): boolean { return this.activeRowId()[namespace] === rowId; }
+
+  private activeRecord(namespace: string): NamespaceData {
+    const cols = this.columnsFor(namespace);
+    const rows = this.rowsFor(namespace);
+    const active = rows.find((r) => r.id === this.activeRowId()[namespace]) ?? rows[0];
+    return active ? this.cellsToRecord(cols, active.cells) : {};
+  }
+
+  // --- Grid mutations ---
+
+  updateCell(namespace: string, rowId: number, col: string, text: string) {
+    this.gridRows.update((all) => ({
+      ...all,
+      [namespace]: (all[namespace] ?? []).map((r) =>
+        r.id === rowId ? { ...r, cells: { ...r.cells, [col]: text } } : r,
+      ),
+    }));
+    if (this.isActiveRow(namespace, rowId)) this.syncActive(namespace);
+  }
+
+  setActiveRow(namespace: string, rowId: number) {
+    this.activeRowId.update((all) => ({ ...all, [namespace]: rowId }));
+    this.syncActive(namespace);
+  }
+
+  addGridRow(namespace: string) {
+    if (!this.isExpanded(namespace)) this.expandedNamespaces.update((s) => new Set(s).add(namespace));
+    const cols = this.columnsFor(namespace);
+    const cells = this.emptyCells(cols);
+    const pk = this.primaryKey(namespace);
+    cells[pk] = this.uniquePk(namespace, namespace.toUpperCase().slice(0, 4) + '-NEW');
+    const row: GridRow = { id: this.rowSeq++, cells };
+    this.gridRows.update((all) => ({ ...all, [namespace]: [...(all[namespace] ?? []), row] }));
+  }
+
+  /** Copy a row into a new row directly below, with a fresh primary key. */
+  copyRow(namespace: string, rowId: number) {
+    const rows = this.rowsFor(namespace);
+    const idx = rows.findIndex((r) => r.id === rowId);
+    if (idx < 0) return;
+    const source = rows[idx];
+    const pk = this.primaryKey(namespace);
+    const cells = { ...source.cells };
+    cells[pk] = this.uniquePk(namespace, (source.cells[pk] || namespace.toUpperCase().slice(0, 4)) + '-COPY');
+    const copy: GridRow = { id: this.rowSeq++, cells };
+    const next = [...rows.slice(0, idx + 1), copy, ...rows.slice(idx + 1)];
+    this.gridRows.update((all) => ({ ...all, [namespace]: next }));
+    this.setActiveRow(namespace, copy.id);
+    this.store.showToast(`📋 Row copied as "${cells[pk]}".`);
+  }
+
+  removeRow(namespace: string, rowId: number) {
+    const rows = this.rowsFor(namespace);
+    if (rows.length <= 1) { this.store.showToast('⚠️ At least one row is required.'); return; }
+    const next = rows.filter((r) => r.id !== rowId);
+    this.gridRows.update((all) => ({ ...all, [namespace]: next }));
+    if (this.activeRowId()[namespace] === rowId) {
+      this.activeRowId.update((all) => ({ ...all, [namespace]: next[0].id }));
+    }
+    this.syncActive(namespace);
+  }
+
+  updateNewColumnName(namespace: string, name: string) {
+    this.newColumnName.update((all) => ({ ...all, [namespace]: name }));
+  }
+
+  addColumn(namespace: string) {
+    const name = (this.newColumnName()[namespace] ?? '').trim();
+    if (!name) { this.store.showToast('⚠️ Enter a column name.'); return; }
+    if (this.columnsFor(namespace).includes(name)) { this.store.showToast(`⚠️ Column "${name}" already exists.`); return; }
+    this.gridColumns.update((all) => ({ ...all, [namespace]: [...(all[namespace] ?? []), name] }));
+    this.gridRows.update((all) => ({
+      ...all,
+      [namespace]: (all[namespace] ?? []).map((r) => ({ ...r, cells: { ...r.cells, [name]: '' } })),
+    }));
+    this.newColumnName.update((all) => ({ ...all, [namespace]: '' }));
+  }
+
+  removeColumn(namespace: string, col: string) {
+    if (this.isPrimaryKey(namespace, col)) { this.store.showToast('⚠️ Cannot remove the primary key column.'); return; }
+    this.gridColumns.update((all) => ({ ...all, [namespace]: (all[namespace] ?? []).filter((c) => c !== col) }));
+    this.gridRows.update((all) => ({
+      ...all,
+      [namespace]: (all[namespace] ?? []).map((r) => {
+        const cells = { ...r.cells };
+        delete cells[col];
+        return { ...r, cells };
+      }),
+    }));
+    this.syncActive(namespace);
+  }
+
+  private uniquePk(namespace: string, base: string): string {
+    const pk = this.primaryKey(namespace);
+    const existing = new Set(this.rowsFor(namespace).map((r) => r.cells[pk]));
+    if (!existing.has(base)) return base;
+    let i = 2;
+    while (existing.has(`${base}-${i}`)) i++;
+    return `${base}-${i}`;
+  }
+
+  /** Push the active row's record into the store + JSON view + config. */
+  private syncActive(namespace: string) {
+    const data = this.activeRecord(namespace);
     this.namespaceConfigs.update((configs) => ({
       ...configs,
       [namespace]: { ...configs[namespace], data, isEdited: true, isFetched: true },
@@ -204,6 +340,43 @@ export class TestDataTabComponent {
     this.editingJson.update((current) => ({ ...current, [namespace]: JSON.stringify(data, null, 2) }));
     this.jsonErrors.update((current) => { const next = { ...current }; delete next[namespace]; return next; });
     this.store.testData.update((current) => ({ ...current, [namespace]: data }));
+  }
+
+  /** Add or update a fetched record as a grid row (keyed by primary key) and make it active. */
+  private upsertRecord(namespace: string, record: NamespaceData) {
+    const cols = this.buildColumns(namespace, [...this.rowsToRecords(namespace), record]);
+    const pk = cols.includes('id') ? 'id' : cols[0];
+    const pkValue = this.valueToText(record[pk]);
+    const rows = this.rowsFor(namespace);
+    const existingIdx = pkValue ? rows.findIndex((r) => r.cells[pk] === pkValue) : -1;
+    const cells = this.recordToCells(cols, record);
+
+    let activeId: number;
+    let nextRows: GridRow[];
+    if (existingIdx >= 0) {
+      activeId = rows[existingIdx].id;
+      nextRows = rows.map((r, i) => (i === existingIdx ? { id: r.id, cells } : { ...r, cells: this.recordToCells(cols, this.cellsToRecord(this.columnsFor(namespace), r.cells)) }));
+    } else {
+      const row: GridRow = { id: this.rowSeq++, cells };
+      activeId = row.id;
+      nextRows = [...rows.map((r) => ({ ...r, cells: this.padCells(cols, r.cells) })), row];
+    }
+
+    this.gridColumns.update((all) => ({ ...all, [namespace]: cols }));
+    this.gridRows.update((all) => ({ ...all, [namespace]: nextRows }));
+    this.activeRowId.update((all) => ({ ...all, [namespace]: activeId }));
+    this.syncActive(namespace);
+  }
+
+  private padCells(cols: string[], cells: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const col of cols) out[col] = cells[col] ?? '';
+    return out;
+  }
+
+  private rowsToRecords(namespace: string): NamespaceData[] {
+    const cols = this.columnsFor(namespace);
+    return this.rowsFor(namespace).map((r) => this.cellsToRecord(cols, r.cells));
   }
 
   toggleNamespace(namespace: string) {
@@ -235,11 +408,7 @@ export class TestDataTabComponent {
     if (!data) { this.store.showToast(`❌ No data found for "${namespace}" with key "${config.dbKey}".`); return; }
 
     const cloned = JSON.parse(JSON.stringify(data)) as NamespaceData;
-    this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], data: cloned, isFetched: true, isEdited: false } }));
-    this.editingJson.update(current => ({ ...current, [namespace]: JSON.stringify(cloned, null, 2) }));
-    this.tableDrafts.update(drafts => ({ ...drafts, [namespace]: this.buildDraft(cloned) }));
-    this.jsonErrors.update(current => { const next = { ...current }; delete next[namespace]; return next; });
-    this.store.testData.update(current => ({ ...current, [namespace]: cloned }));
+    this.upsertRecord(namespace, cloned);
     this.store.showToast(`✅ Fetched "${namespace}" data for key "${config.dbKey}" successfully.`);
   }
 
@@ -248,6 +417,18 @@ export class TestDataTabComponent {
     try {
       const parsed = JSON.parse(text) as NamespaceData;
       this.jsonErrors.update(current => { const next = { ...current }; delete next[namespace]; return next; });
+      // Reflect JSON edits back into the active grid row
+      const cols = this.buildColumns(namespace, [...this.rowsToRecords(namespace), parsed]);
+      const activeId = this.activeRowId()[namespace];
+      this.gridColumns.update(all => ({ ...all, [namespace]: cols }));
+      this.gridRows.update(all => ({
+        ...all,
+        [namespace]: (all[namespace] ?? []).map(r =>
+          r.id === activeId
+            ? { id: r.id, cells: this.recordToCells(cols, parsed) }
+            : { ...r, cells: this.padCells(cols, r.cells) },
+        ),
+      }));
       this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], data: parsed, isEdited: true, isFetched: true } }));
       this.store.testData.update(current => ({ ...current, [namespace]: parsed }));
     } catch (error) {
