@@ -2,70 +2,24 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
-import { TestCaseRun } from '../../models/types';
+import { Rule } from '../../models/types';
+import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 
-const SYSTEM_TEST_CASES: TestCaseRun[] = [
-  {
-    id: 'Elig_Gold_Tier_Premium',
-    name: 'Elig_Gold_Tier_Premium',
-    description: 'Edge Case: High Balance',
-    version: 'v12.0.4',
-    status: 'passed',
-    timestamp: '2 mins ago',
-  },
-  {
-    id: 'Neg_Underage_Exclusion',
-    name: 'Neg_Underage_Exclusion',
-    description: 'Regression: Age Validation',
-    version: 'v12.0.4',
-    status: 'failed',
-    timestamp: '15 mins ago',
-  },
-  {
-    id: 'Elig_Standard_Customer',
-    name: 'Elig_Standard_Customer',
-    description: 'Baseline Validation',
-    version: 'v12.0.4',
-    status: 'passed',
-    timestamp: '42 mins ago',
-  },
-  {
-    id: 'Elig_Credit_Limit_Cross',
-    name: 'Elig_Credit_Limit_Cross',
-    description: 'Complex Boolean Tree',
-    version: 'v12.0.3',
-    status: 'pending',
-    timestamp: '1 hour ago',
-  },
-];
-
-const USER_TEST_CASES: TestCaseRun[] = [
-  {
-    id: 'User_Retail_HighAge',
-    name: 'User_Retail_HighAge',
-    description: 'Manual input exceeding 85 years age',
-    version: 'v12.0.4',
-    status: 'passed',
-    timestamp: '3 hours ago',
-  },
-  {
-    id: 'User_Empty_Tags_Check',
-    name: 'User_Empty_Tags_Check',
-    description: 'Null and empty tags edge validation',
-    version: 'v12.0.4',
-    status: 'passed',
-    timestamp: '5 hours ago',
-  },
-  {
-    id: 'User_Extreme_Balance_Ex',
-    name: 'User_Extreme_Balance_Ex',
-    description: 'Balance > 1,000,000 extreme bounds',
-    version: 'v12.0.3',
-    status: 'failed',
-    timestamp: '1 day ago',
-  },
-];
+export interface RuleHealth {
+  rule: Rule;
+  namespaceCount: number;
+  conditionCount: number;
+  testCaseCount: number;
+  runCount: number;
+  passedRuns: number;
+  failedRuns: number;
+  lastResult: 'PASSED' | 'FAILED' | null;
+  lastRunAt: string | null;
+  coverage: number;        // % of conditions evaluated at least once across runs
+  passRate: number;        // % of runs that passed
+  health: 'healthy' | 'failing' | 'untested';
+}
 
 @Component({
   selector: 'app-overview-tab',
@@ -77,85 +31,142 @@ const USER_TEST_CASES: TestCaseRun[] = [
 export class OverviewTabComponent {
   readonly Math = Math;
   readonly store = inject(RuleStoreService);
-  readonly activeTabSub = signal<'system' | 'user'>('system');
+  private readonly ruleEngine = inject(RuleEngineService);
+
   readonly searchQuery = signal('');
-  readonly currentPage = signal(1);
-  readonly isRunningValidation = signal(false);
-  readonly systemCases = signal<TestCaseRun[]>(SYSTEM_TEST_CASES);
-  readonly userCases = signal<TestCaseRun[]>(USER_TEST_CASES);
-  readonly casesPerPage = 4;
+  readonly healthFilter = signal<'all' | 'healthy' | 'failing' | 'untested'>('all');
 
-  readonly currentCases = computed(() =>
-    this.activeTabSub() === 'system' ? this.systemCases() : this.userCases(),
-  );
+  /** Per-rule health derived from rules, saved test cases, and run history. */
+  readonly ruleHealth = computed((): RuleHealth[] => {
+    const rules = this.store.allRules();
+    const allRules = rules;
+    const testCases = this.store.testCases();
+    const runs = this.store.runHistory();
 
-  readonly filteredCases = computed(() => {
-    const query = this.searchQuery().toLowerCase();
-    return this.currentCases().filter(
-      (testCase) =>
-        testCase.name.toLowerCase().includes(query) || testCase.description.toLowerCase().includes(query),
-    );
-  });
+    return rules.map((rule) => {
+      const namespaces = this.ruleEngine.extractNamespaces(rule, allRules);
+      const attrs = this.ruleEngine.extractNamespaceAttributes(rule, allRules);
+      const conditionCount = Object.values(attrs).reduce((sum, list) => sum + list.length, 0);
 
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filteredCases().length / this.casesPerPage)));
-  readonly paginatedCases = computed(() => {
-    const start = (this.currentPage() - 1) * this.casesPerPage;
-    return this.filteredCases().slice(start, start + this.casesPerPage);
-  });
+      const ruleCases = testCases.filter((tc) => tc.ruleId === rule.rule_id);
+      const ruleRuns = runs.filter((r) => r.ruleId === rule.rule_id);
+      const passedRuns = ruleRuns.filter((r) => r.evalResult.status === 'PASSED').length;
+      const failedRuns = ruleRuns.length - passedRuns;
 
-  selectSubTab(tab: 'system' | 'user') {
-    this.activeTabSub.set(tab);
-    this.currentPage.set(1);
-  }
-
-  updateSearch(query: string) {
-    this.searchQuery.set(query);
-    this.currentPage.set(1);
-  }
-
-  pageNumbers(): number[] {
-    return Array.from({ length: this.totalPages() }, (_, index) => index + 1);
-  }
-
-  runValidation() {
-    this.isRunningValidation.set(true);
-    this.store.showToast('Starting live evaluation on active rule set...');
-
-    setTimeout(() => {
-      if (this.activeTabSub() === 'system') {
-        this.systemCases.update((cases) =>
-          cases.map((testCase) =>
-            testCase.status === 'pending'
-              ? { ...testCase, status: 'passed', timestamp: 'Just now' }
-              : testCase,
-          ),
-        );
-        this.store.showToast('Validation complete! 1 pending run cleared. Status: Active.');
-      } else {
-        this.store.showToast('Validation complete on manually defined cases!');
+      // Coverage: distinct conditions evaluated (not short-circuited) at least once
+      const evaluatedExpr = new Set<string>();
+      const allExpr = new Set<string>();
+      for (const run of ruleRuns) {
+        for (const leaf of this.ruleEngine.flattenConditions(run.evalResult)) {
+          allExpr.add(leaf.expression);
+          if (!leaf.shortCircuited && leaf.status !== 'SKIPPED') {
+            evaluatedExpr.add(leaf.expression);
+          }
+        }
       }
-      this.isRunningValidation.set(false);
-    }, 1800);
+      const coverage = allExpr.size > 0 ? Math.round((evaluatedExpr.size / allExpr.size) * 100) : 0;
+      const passRate = ruleRuns.length > 0 ? Math.round((passedRuns / ruleRuns.length) * 100) : 0;
+
+      const sortedRuns = [...ruleRuns].sort((a, b) => b.runAt.localeCompare(a.runAt));
+      const lastRun = sortedRuns[0];
+
+      let health: RuleHealth['health'] = 'untested';
+      if (ruleRuns.length > 0) {
+        health = failedRuns > 0 ? 'failing' : 'healthy';
+      }
+
+      return {
+        rule,
+        namespaceCount: namespaces.length,
+        conditionCount,
+        testCaseCount: ruleCases.length,
+        runCount: ruleRuns.length,
+        passedRuns,
+        failedRuns,
+        lastResult: lastRun ? (lastRun.evalResult.status as 'PASSED' | 'FAILED') : null,
+        lastRunAt: lastRun ? lastRun.runAt : null,
+        coverage,
+        passRate,
+        health,
+      };
+    });
+  });
+
+  readonly filteredHealth = computed(() => {
+    const q = this.searchQuery().toLowerCase().trim();
+    const filter = this.healthFilter();
+    return this.ruleHealth().filter((h) => {
+      if (filter !== 'all' && h.health !== filter) return false;
+      if (!q) return true;
+      return h.rule.name.toLowerCase().includes(q) || h.rule.rule_id.toLowerCase().includes(q);
+    });
+  });
+
+  readonly summary = computed(() => {
+    const health = this.ruleHealth();
+    const totalCases = this.store.testCases().length;
+    const totalRuns = this.store.runHistory().length;
+    const passedRuns = this.store.runHistory().filter((r) => r.evalResult.status === 'PASSED').length;
+    const tested = health.filter((h) => h.runCount > 0);
+    const avgCoverage = tested.length > 0
+      ? Math.round(tested.reduce((s, h) => s + h.coverage, 0) / tested.length)
+      : 0;
+
+    return {
+      totalRules: health.length,
+      healthy: health.filter((h) => h.health === 'healthy').length,
+      failing: health.filter((h) => h.health === 'failing').length,
+      untested: health.filter((h) => h.health === 'untested').length,
+      totalCases,
+      totalRuns,
+      passedRuns,
+      failedRuns: totalRuns - passedRuns,
+      overallPassRate: totalRuns > 0 ? Math.round((passedRuns / totalRuns) * 100) : 0,
+      avgCoverage,
+    };
+  });
+
+  /** Overall health score 0-100 blending coverage, pass rate, and test presence. */
+  readonly healthScore = computed(() => {
+    const s = this.summary();
+    if (s.totalRules === 0) return 0;
+    const testedRatio = (s.totalRules - s.untested) / s.totalRules;
+    const score = 0.4 * s.overallPassRate + 0.35 * s.avgCoverage + 0.25 * (testedRatio * 100);
+    return Math.round(score);
+  });
+
+  readonly healthScoreLabel = computed(() => {
+    const score = this.healthScore();
+    if (score >= 80) return 'Excellent';
+    if (score >= 60) return 'Good';
+    if (score >= 40) return 'Needs Attention';
+    return 'Critical';
+  });
+
+  setFilter(f: 'all' | 'healthy' | 'failing' | 'untested') {
+    this.healthFilter.set(f);
   }
 
-  applyOptimization() {
-    if (this.store.isOptimized()) {
-      this.store.showToast('Optimization has already been flattened into CrossSellCampaignEligibility (v12-opt)!');
-      return;
-    }
-
-    this.store.isOptimized.set(true);
-    this.store.aggregateCoverage.set(92.4);
-    this.store.showToast('✨ AI Audit applied! Removed 3 redundant logical paths. Performance +14%! Coverage boosted to 92.4%.');
+  formatDate(iso: string | null): string {
+    if (!iso) return 'Never';
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  viewExplanation(caseId: string) {
-    this.store.selectedTestCaseId.set(caseId);
-    this.store.activeTab.set('test-runs');
+  openRule(h: RuleHealth, tab: 'test-data' | 'generated' | 'test-runs' | 'coverage') {
+    this.store.selectRule(h.rule.rule_id);
+    this.store.activeTab.set(tab);
   }
 
-  switchToGenerated() {
-    this.store.activeTab.set('generated');
-    this.store.showToast('Switched to generation studio.');
+  coverageColor(pct: number): string {
+    if (pct >= 75) return 'bg-green-500';
+    if (pct >= 40) return 'bg-yellow-400';
+    return 'bg-red-500';
+  }
+
+  scoreColor(score: number): string {
+    if (score >= 80) return 'text-fidelity-green-bright';
+    if (score >= 60) return 'text-yellow-600';
+    if (score >= 40) return 'text-orange-500';
+    return 'text-red-600';
   }
 }
