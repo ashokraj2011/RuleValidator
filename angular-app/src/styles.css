@@ -77,3 +77,27 @@ select,
 textarea {
   font: inherit;
 }
+
+/* App-like selection behavior: the UI chrome is not selectable, so clicking
+   (or double/triple-clicking) buttons and labels never highlights text.
+   Selection is re-enabled only for editable fields, code/snapshot blocks,
+   and anything explicitly opted in via the `select-text` utility. */
+*,
+*::before,
+*::after {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+pre,
+code,
+[contenteditable="true"],
+.select-text,
+.select-text * {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
