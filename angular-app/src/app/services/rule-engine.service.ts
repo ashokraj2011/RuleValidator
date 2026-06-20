@@ -165,25 +165,83 @@ export class RuleEngineService {
   }
 
   private evaluateLogical(term: LogicalTerm, data: TestDataSnapshot, allRules?: Rule[]): EvalResult {
-    const children = term.terms.map((child) => this.evaluateTerm(child, data, allRules));
-    let status: 'PASSED' | 'FAILED' | 'SKIPPED';
+    const children: EvalResult[] = [];
 
     if (term.operator === 'AND') {
-      status = children.every((child) => child.status === 'PASSED') ? 'PASSED' : 'FAILED';
-    } else if (term.operator === 'OR') {
-      status = children.some((child) => child.status === 'PASSED') ? 'PASSED' : 'FAILED';
-    } else {
-      status = children[0]?.status === 'PASSED' ? 'FAILED' : 'PASSED';
+      let failedEarly = false;
+      for (const child of term.terms) {
+        if (failedEarly) {
+          children.push(this.makeSkipped(child, allRules));
+        } else {
+          const result = this.evaluateTerm(child, data, allRules);
+          children.push(result);
+          if (result.status === 'FAILED') failedEarly = true;
+        }
+      }
+      const status = failedEarly ? 'FAILED' : 'PASSED';
+      return { expression: 'AND Group', operator: 'AND', expected: 'AND', actual: status, status, children };
     }
 
+    if (term.operator === 'OR') {
+      let passedEarly = false;
+      for (const child of term.terms) {
+        if (passedEarly) {
+          children.push(this.makeSkipped(child, allRules));
+        } else {
+          const result = this.evaluateTerm(child, data, allRules);
+          children.push(result);
+          if (result.status === 'PASSED') passedEarly = true;
+        }
+      }
+      const status = passedEarly ? 'PASSED' : 'FAILED';
+      return { expression: 'OR Group', operator: 'OR', expected: 'OR', actual: status, status, children };
+    }
+
+    // NOT — single child, invert
+    const child = this.evaluateTerm(term.terms[0], data, allRules);
+    const status = child.status === 'PASSED' ? 'FAILED' : 'PASSED';
+    return { expression: 'NOT Group', operator: 'NOT', expected: 'NOT', actual: status, status, children: [child] };
+  }
+
+  /** Build a SKIPPED node without evaluating (for short-circuited branches). */
+  private makeSkipped(term: Term, allRules?: Rule[]): EvalResult {
+    if (this.isComparisonTerm(term)) {
+      return {
+        expression: `${term.namespace}.${term.attribute} ${this.operatorDisplay(term.operator)} ${JSON.stringify(term.value)}`,
+        namespace: term.namespace,
+        attribute: term.attribute,
+        operator: term.operator,
+        expected: term.value,
+        actual: 'short-circuited',
+        status: 'SKIPPED',
+        shortCircuited: true,
+      };
+    }
+    if (this.isLogicalTerm(term)) {
+      return {
+        expression: `${term.operator} Group`,
+        operator: term.operator,
+        expected: term.operator,
+        actual: 'short-circuited',
+        status: 'SKIPPED',
+        shortCircuited: true,
+        children: term.terms.map((t) => this.makeSkipped(t, allRules)),
+      };
+    }
     return {
-      expression: `${term.operator} Group`,
-      operator: term.operator,
-      expected: term.operator,
-      actual: status,
-      status,
-      children,
+      expression: `[Rule Ref skipped]`,
+      operator: 'ref',
+      expected: '',
+      actual: 'short-circuited',
+      status: 'SKIPPED',
+      shortCircuited: true,
     };
+  }
+
+  /** Flatten all leaf conditions from an EvalResult tree for coverage analysis. */
+  flattenConditions(result: EvalResult): EvalResult[] {
+    if (!result.children?.length) return [result];
+    return result.children.flatMap((child) => this.flattenConditions(child));
   }
 }
 

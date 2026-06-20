@@ -14,6 +14,7 @@
           <h1 class="text-base font-bold leading-tight text-neutral-900">{{ store.selectedRule().name }}</h1>
           <p class="mt-0.5 text-xs text-neutral-500">
             {{ counts().passed }}/{{ counts().total }} terms passed • {{ counts().failed }} failed
+            <span *ngIf="shortCircuitedCount() > 0" class="text-neutral-400">• {{ shortCircuitedCount() }} short-circuited</span>
           </p>
         </div>
       </div>
@@ -114,6 +115,25 @@
         </div>
         <div class="flex-1 select-text overflow-auto bg-[#141414] p-4 font-mono text-xs leading-5 text-[#d4d4d4]">
           <pre>{{ snapshotJson() }}</pre>
+        </div>
+      </section>
+
+      <!-- Passed Records panel (only when rule PASSES) -->
+      <section *ngIf="evalResult().status === 'PASSED' && passedNamespaceEntries().length > 0"
+        class="shrink-0 rounded-md border border-green-300 bg-green-50 shadow-xs overflow-hidden">
+        <div class="flex items-center gap-2 border-b border-green-200 bg-green-100/60 px-4 py-2.5">
+          <lucide-icon name="circle-check" class="h-4 w-4 text-fidelity-green-bright shrink-0"></lucide-icon>
+          <span class="text-xs font-bold uppercase tracking-wide text-green-800">Passed Records</span>
+          <span class="text-[10px] text-green-600">— data that satisfied the rule</span>
+        </div>
+        <div class="divide-y divide-green-200">
+          <div *ngFor="let entry of passedNamespaceEntries()" class="p-3">
+            <div class="mb-1 flex items-center gap-1.5">
+              <lucide-icon name="layers" class="h-3.5 w-3.5 text-green-600 shrink-0"></lucide-icon>
+              <span class="text-[10px] font-bold uppercase tracking-wide text-green-700">{{ entry[0] }}</span>
+            </div>
+            <pre class="max-h-28 overflow-auto rounded bg-white/60 p-2 font-mono text-[10px] leading-4 text-green-900 whitespace-pre-wrap border border-green-200">{{ entry[1] | json }}</pre>
+          </div>
         </div>
       </section>
     </div>

@@ -75,7 +75,44 @@ export interface EvalResult {
   expected: any;
   actual: any;
   status: 'PASSED' | 'FAILED' | 'SKIPPED';
+  shortCircuited?: boolean;   // true when skipped due to AND/OR short-circuit
   children?: EvalResult[];
+}
+
+// --- Named Test Cases ---
+
+export interface TestCase {
+  id: string;
+  name: string;
+  description: string;
+  ruleId: string;
+  /** DB keys per namespace */
+  dbKeys: Record<string, string>;
+  /** Data snapshot per namespace */
+  snapshot: TestDataSnapshot;
+  createdAt: string;
+  lastRunAt?: string;
+  lastResult?: 'PASSED' | 'FAILED';
+}
+
+export interface TestCaseRunResult {
+  id: string;
+  testCaseId: string;
+  ruleId: string;
+  runAt: string;
+  evalResult: EvalResult;
+  snapshot: TestDataSnapshot;
+}
+
+export interface ConditionStats {
+  expression: string;
+  namespace?: string;
+  attribute?: string;
+  operator: string;
+  evaluated: number;
+  passed: number;
+  failed: number;
+  shortCircuited: number;
 }
 
 // --- Existing types (kept for compatibility) ---

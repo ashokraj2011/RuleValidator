@@ -31,6 +31,16 @@ export class TestRunsTabComponent {
     return active ? this.findNodeByPath(this.evalResult(), active) : null;
   });
 
+  readonly shortCircuitedCount = computed(() => {
+    const leaves = this.ruleEngine.flattenConditions(this.evalResult());
+    return leaves.filter(l => l.shortCircuited).length;
+  });
+
+  readonly passedNamespaceEntries = computed((): [string, any][] => {
+    if (this.evalResult().status !== 'PASSED') return [];
+    return Object.entries(this.store.testData());
+  });
+
   constructor() {
     effect(() => {
       this.store.selectedRuleId();

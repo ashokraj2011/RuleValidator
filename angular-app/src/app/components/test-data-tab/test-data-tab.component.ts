@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
-import { NamespaceConfig, NamespaceData } from '../../models/types';
+import { NamespaceConfig, NamespaceData, TestCase } from '../../models/types';
 import { MockDbService } from '../../services/mock-db.service';
 import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
@@ -30,6 +30,11 @@ export class TestDataTabComponent {
   readonly loadingNamespaces = signal<Set<string>>(new Set());
   readonly editingJson = signal<Record<string, string>>({});
   readonly jsonErrors = signal<Record<string, string>>({});
+
+  // Save as Test Case modal
+  readonly showSaveModal = signal(false);
+  readonly saveName = signal('');
+  readonly saveDescription = signal('');
 
   readonly allNamespacesReady = computed(() =>
     this.namespaces().every((namespace) => {
@@ -76,121 +81,60 @@ export class TestDataTabComponent {
   toggleNamespace(namespace: string) {
     this.expandedNamespaces.update((current) => {
       const next = new Set(current);
-      if (next.has(namespace)) {
-        next.delete(namespace);
-      } else {
-        next.add(namespace);
-      }
+      if (next.has(namespace)) next.delete(namespace);
+      else next.add(namespace);
       return next;
     });
   }
 
-  isExpanded(namespace: string): boolean {
-    return this.expandedNamespaces().has(namespace);
-  }
-
-  isLoading(namespace: string): boolean {
-    return this.loadingNamespaces().has(namespace);
-  }
-
-  getConfig(namespace: string): NamespaceConfig | undefined {
-    return this.namespaceConfigs()[namespace];
-  }
-
-  getAvailableKeys(namespace: string): string[] {
-    return this.mockDb.getAvailableKeys(namespace);
-  }
+  isExpanded(namespace: string): boolean { return this.expandedNamespaces().has(namespace); }
+  isLoading(namespace: string): boolean { return this.loadingNamespaces().has(namespace); }
+  getConfig(namespace: string): NamespaceConfig | undefined { return this.namespaceConfigs()[namespace]; }
+  getAvailableKeys(namespace: string): string[] { return this.mockDb.getAvailableKeys(namespace); }
 
   updateDbKey(namespace: string, key: string) {
-    this.namespaceConfigs.update((configs) => ({
-      ...configs,
-      [namespace]: {
-        ...configs[namespace],
-        dbKey: key,
-      },
-    }));
+    this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], dbKey: key } }));
   }
 
   async fetchNamespace(namespace: string) {
     const config = this.namespaceConfigs()[namespace];
-    if (!config?.dbKey) {
-      this.store.showToast(`⚠️ Enter a DB key for "${namespace}" before fetching.`);
-      return;
-    }
+    if (!config?.dbKey) { this.store.showToast(`⚠️ Enter a DB key for "${namespace}" before fetching.`); return; }
 
-    this.loadingNamespaces.update((current) => new Set(current).add(namespace));
+    this.loadingNamespaces.update(current => new Set(current).add(namespace));
     const data = await this.mockDb.fetchFromDb(namespace, config.dbKey);
-    this.loadingNamespaces.update((current) => {
-      const next = new Set(current);
-      next.delete(namespace);
-      return next;
-    });
+    this.loadingNamespaces.update(current => { const next = new Set(current); next.delete(namespace); return next; });
 
-    if (!data) {
-      this.store.showToast(`❌ No data found for "${namespace}" with key "${config.dbKey}".`);
-      return;
-    }
+    if (!data) { this.store.showToast(`❌ No data found for "${namespace}" with key "${config.dbKey}".`); return; }
 
     const cloned = JSON.parse(JSON.stringify(data)) as NamespaceData;
-    this.namespaceConfigs.update((configs) => ({
-      ...configs,
-      [namespace]: {
-        ...configs[namespace],
-        data: cloned,
-        isFetched: true,
-        isEdited: false,
-      },
-    }));
-    this.editingJson.update((current) => ({ ...current, [namespace]: JSON.stringify(cloned, null, 2) }));
-    this.jsonErrors.update((current) => {
-      const next = { ...current };
-      delete next[namespace];
-      return next;
-    });
-    this.store.testData.update((current) => ({ ...current, [namespace]: cloned }));
+    this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], data: cloned, isFetched: true, isEdited: false } }));
+    this.editingJson.update(current => ({ ...current, [namespace]: JSON.stringify(cloned, null, 2) }));
+    this.jsonErrors.update(current => { const next = { ...current }; delete next[namespace]; return next; });
+    this.store.testData.update(current => ({ ...current, [namespace]: cloned }));
     this.store.showToast(`✅ Fetched "${namespace}" data for key "${config.dbKey}" successfully.`);
   }
 
   onJsonEdit(namespace: string, text: string) {
-    this.editingJson.update((current) => ({ ...current, [namespace]: text }));
-
+    this.editingJson.update(current => ({ ...current, [namespace]: text }));
     try {
       const parsed = JSON.parse(text) as NamespaceData;
-      this.jsonErrors.update((current) => {
-        const next = { ...current };
-        delete next[namespace];
-        return next;
-      });
-      this.namespaceConfigs.update((configs) => ({
-        ...configs,
-        [namespace]: {
-          ...configs[namespace],
-          data: parsed,
-          isEdited: true,
-          isFetched: true,
-        },
-      }));
-      this.store.testData.update((current) => ({ ...current, [namespace]: parsed }));
+      this.jsonErrors.update(current => { const next = { ...current }; delete next[namespace]; return next; });
+      this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], data: parsed, isEdited: true, isFetched: true } }));
+      this.store.testData.update(current => ({ ...current, [namespace]: parsed }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid JSON';
-      this.jsonErrors.update((current) => ({ ...current, [namespace]: message }));
+      this.jsonErrors.update(current => ({ ...current, [namespace]: message }));
     }
   }
 
   getJsonText(namespace: string): string {
     const cached = this.editingJson()[namespace];
-    if (cached !== undefined) {
-      return cached;
-    }
-
+    if (cached !== undefined) return cached;
     const data = this.namespaceConfigs()[namespace]?.data;
     return data && Object.keys(data).length > 0 ? JSON.stringify(data, null, 2) : '';
   }
 
-  hasError(namespace: string): boolean {
-    return !!this.jsonErrors()[namespace];
-  }
-
+  hasError(namespace: string): boolean { return !!this.jsonErrors()[namespace]; }
   hasData(namespace: string): boolean {
     const data = this.namespaceConfigs()[namespace]?.data;
     return !!data && Object.keys(data).length > 0;
@@ -200,9 +144,7 @@ export class TestDataTabComponent {
     return Array.from({ length: Math.max(1, text.split('\n').length) }, (_, index) => index + 1);
   }
 
-  attrsFor(namespace: string): string[] {
-    return this.namespaceAttributes()[namespace] ?? [];
-  }
+  attrsFor(namespace: string): string[] { return this.namespaceAttributes()[namespace] ?? []; }
 
   isAttributePresent(namespace: string, attribute: string): boolean {
     const config = this.namespaceConfigs()[namespace];
@@ -210,20 +152,44 @@ export class TestDataTabComponent {
   }
 
   saveSnapshot() {
-    if (Object.keys(this.jsonErrors()).length > 0) {
-      this.store.showToast('❌ Fix JSON errors before saving.');
-      return;
-    }
-
+    if (Object.keys(this.jsonErrors()).length > 0) { this.store.showToast('❌ Fix JSON errors before saving.'); return; }
     this.store.showToast('💾 Test data snapshot saved successfully.');
   }
 
   evaluateRule() {
-    if (!this.allNamespacesReady()) {
-      this.store.showToast('⚠️ Fetch or provide data for all namespaces before running.');
-      return;
+    if (!this.allNamespacesReady()) { this.store.showToast('⚠️ Fetch or provide data for all namespaces before running.'); return; }
+    this.store.activeTab.set('test-runs');
+  }
+
+  openSaveModal() {
+    if (!this.allNamespacesReady()) { this.store.showToast('⚠️ Provide data for all namespaces first.'); return; }
+    this.saveName.set('');
+    this.saveDescription.set('');
+    this.showSaveModal.set(true);
+  }
+
+  confirmSave() {
+    const name = this.saveName().trim();
+    if (!name) { this.store.showToast('⚠️ Enter a name for the test case.'); return; }
+
+    const configs = this.namespaceConfigs();
+    const dbKeys: Record<string, string> = {};
+    const snapshot = this.store.testData();
+    for (const ns of this.namespaces()) {
+      dbKeys[ns] = configs[ns]?.dbKey ?? '';
     }
 
-    this.store.activeTab.set('test-runs');
+    const tc: TestCase = {
+      id: `tc-${Date.now()}`,
+      name,
+      description: this.saveDescription().trim(),
+      ruleId: this.store.selectedRuleId(),
+      dbKeys,
+      snapshot: JSON.parse(JSON.stringify(snapshot)),
+      createdAt: new Date().toISOString(),
+    };
+    this.store.saveTestCase(tc);
+    this.showSaveModal.set(false);
+    this.store.showToast(`✅ Test case "${name}" saved.`);
   }
 }

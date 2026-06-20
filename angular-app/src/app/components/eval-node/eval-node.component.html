@@ -28,20 +28,25 @@
     <div
       (click)="select(path)"
       class="relative flex cursor-pointer select-none items-center gap-3 rounded border p-3 transition-all"
-      [ngClass]="leafClasses(node, path)"
+      [ngClass]="[leafClasses(node, path), node.shortCircuited ? 'opacity-50' : '']"
     >
       <lucide-icon
-        [name]="node.status === 'PASSED' ? 'circle-check' : node.status === 'FAILED' ? 'triangle-alert' : 'circle-minus'"
+        [name]="node.shortCircuited ? 'circle-minus' : node.status === 'PASSED' ? 'circle-check' : node.status === 'FAILED' ? 'triangle-alert' : 'circle-minus'"
         class="h-4.5 w-4.5 shrink-0"
-        [ngClass]="statusColor(node.status)"
+        [ngClass]="node.shortCircuited ? 'text-neutral-400' : statusColor(node.status)"
       ></lucide-icon>
       <div class="flex flex-1 items-center justify-between pr-1">
-        <span class="text-xs font-bold text-neutral-800">{{ node.expression }}</span>
+        <span class="text-xs font-bold" [ngClass]="node.shortCircuited ? 'text-neutral-400 italic' : 'text-neutral-800'">
+          {{ node.expression }}
+          <span *ngIf="node.shortCircuited" class="ml-1 text-[9px] font-normal not-italic text-neutral-400">(short-circuited)</span>
+        </span>
         <div class="flex items-center gap-4 text-[11px]">
-          <span class="text-neutral-400">
+          <span *ngIf="!node.shortCircuited" class="text-neutral-400">
             Actual: <span class="font-bold" [ngClass]="statusColor(node.status)">{{ node.actual | json }}</span>
           </span>
-          <span class="font-bold" [ngClass]="statusColor(node.status)">[{{ node.status }}]</span>
+          <span class="font-bold" [ngClass]="node.shortCircuited ? 'text-neutral-400' : statusColor(node.status)">
+            [{{ node.shortCircuited ? 'SKIPPED' : node.status }}]
+          </span>
         </div>
       </div>
     </div>

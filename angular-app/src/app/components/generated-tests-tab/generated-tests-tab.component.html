@@ -1,134 +1,111 @@
-<div class="flex min-h-0 flex-1 flex-col bg-neutral-100">
-  <div class="flex shrink-0 flex-col items-start justify-between gap-3 border-b border-neutral-300 bg-white px-6 py-3.5 sm:flex-row sm:items-center">
-    <div class="flex items-center gap-2 font-sans text-xs text-neutral-500">
-      <span>Projects / Validation Studio / </span>
-      <span class="font-bold text-neutral-800">Test Case Generation Studio - CrossSellCampaignEligibility v12</span>
+<div class="space-y-4">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-neutral-900">Test Cases</h1>
+      <p class="mt-0.5 text-sm text-neutral-500">
+        Saved test cases for <span class="font-bold text-secondary">{{ store.selectedRule().name }}</span>
+        — {{ testCases().length }} case{{ testCases().length !== 1 ? 's' : '' }}
+      </p>
     </div>
-    <div class="flex flex-wrap gap-2">
-      <button type="button" (click)="store.showToast('Archiving historical schema test suites...')" class="rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50">Archive Old Tests</button>
-      <button type="button" (click)="store.showToast('Scanning matrix for 3 missing failure paths...')" class="rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50">Regenerate Only Missing</button>
-      <button type="button" (click)="regenerateAll()" [disabled]="isRegenerating()" class="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-all hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50">
-        {{ isRegenerating() ? 'Regenerating...' : 'Regenerate All' }}
-      </button>
-    </div>
+    <button type="button" (click)="store.activeTab.set('test-data')"
+      class="flex items-center gap-2 rounded bg-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90">
+      <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon>
+      New Test Case
+    </button>
   </div>
 
-  <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden p-5 lg:flex-row">
-    <div class="flex w-full shrink-0 flex-col gap-4 overflow-y-auto lg:w-72">
-      <div class="flex flex-col gap-3 rounded-lg border border-neutral-300 bg-white p-4 shadow-xs">
-        <div class="flex items-center justify-between border-b border-neutral-200 pb-2">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-neutral-800">Generation Strategy</h3>
-          <lucide-icon name="settings" class="h-4 w-4 text-neutral-500"></lucide-icon>
+  <!-- Empty state -->
+  <div *ngIf="testCases().length === 0" class="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-neutral-300 bg-white py-16 text-center">
+    <lucide-icon name="clipboard-check" class="h-10 w-10 text-neutral-300"></lucide-icon>
+    <p class="text-sm font-bold text-neutral-500">No test cases yet</p>
+    <p class="text-xs text-neutral-400 max-w-xs">Go to Test Data, set up namespace data, then click<br/><strong>"Save as Test Case"</strong> to create one.</p>
+    <button type="button" (click)="store.activeTab.set('test-data')"
+      class="mt-2 rounded bg-secondary px-4 py-2 text-xs font-bold text-white hover:opacity-90">
+      Go to Test Data →
+    </button>
+  </div>
+
+  <!-- Test case list -->
+  <div *ngFor="let tc of testCases()" class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+    <!-- Row header -->
+    <div class="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors">
+      <!-- Status badge -->
+      <div class="shrink-0 flex h-8 w-8 items-center justify-center rounded-full"
+        [ngClass]="tc.lastResult === 'PASSED' ? 'bg-green-100' : tc.lastResult === 'FAILED' ? 'bg-red-100' : 'bg-neutral-100'">
+        <lucide-icon
+          [name]="tc.lastResult === 'PASSED' ? 'circle-check' : tc.lastResult === 'FAILED' ? 'octagon-x' : 'clock'"
+          class="h-4 w-4"
+          [ngClass]="tc.lastResult === 'PASSED' ? 'text-fidelity-green-bright' : tc.lastResult === 'FAILED' ? 'text-red-600' : 'text-neutral-400'">
+        </lucide-icon>
+      </div>
+
+      <div class="flex-1 min-w-0 cursor-pointer" (click)="toggleExpand(tc.id)">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold text-neutral-900">{{ tc.name }}</span>
+          <span *ngIf="tc.lastResult" class="rounded px-2 py-0.5 text-[9px] font-bold uppercase"
+            [ngClass]="tc.lastResult === 'PASSED' ? 'bg-green-100 text-fidelity-green-bright' : 'bg-red-100 text-red-600'">
+            {{ tc.lastResult }}
+          </span>
+          <span *ngIf="!tc.lastResult" class="rounded bg-neutral-100 px-2 py-0.5 text-[9px] font-bold uppercase text-neutral-500">
+            NOT RUN
+          </span>
         </div>
-        <div class="space-y-1 select-none">
-          <label class="flex cursor-pointer items-center justify-between rounded border border-transparent p-2 transition-all hover:bg-neutral-50">
-            <span class="text-xs font-medium text-neutral-700">Happy Path</span>
-            <input type="checkbox" [checked]="strategies().happyPath" (change)="toggleStrategy('happyPath')" class="h-4 w-4 cursor-pointer rounded border-neutral-300 text-primary focus:ring-0" />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between rounded border border-transparent p-2 transition-all hover:bg-neutral-50">
-            <span class="text-xs font-medium text-neutral-700">Boundary Analysis</span>
-            <input type="checkbox" [checked]="strategies().boundary" (change)="toggleStrategy('boundary')" class="h-4 w-4 cursor-pointer rounded border-neutral-300 text-primary focus:ring-0" />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between rounded border border-transparent p-2 transition-all hover:bg-neutral-50">
-            <span class="text-xs font-medium text-neutral-700">Null/Missing Values</span>
-            <input type="checkbox" [checked]="strategies().nulls" (change)="toggleStrategy('nulls')" class="h-4 w-4 cursor-pointer rounded border-neutral-300 text-primary focus:ring-0" />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between rounded border border-transparent p-2 transition-all hover:bg-neutral-50">
-            <span class="text-xs font-medium text-neutral-700">Array Scenarios</span>
-            <input type="checkbox" [checked]="strategies().arrays" (change)="toggleStrategy('arrays')" class="h-4 w-4 cursor-pointer rounded border-neutral-300 text-primary focus:ring-0" />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between rounded border border-transparent p-2 transition-all hover:bg-neutral-50">
-            <span class="text-xs font-medium text-neutral-700">Type Coercion</span>
-            <input type="checkbox" [checked]="strategies().coercion" (change)="toggleStrategy('coercion')" class="h-4 w-4 cursor-pointer rounded border-neutral-300 text-primary focus:ring-0" />
-          </label>
+        <p class="mt-0.5 text-xs text-neutral-400 truncate">
+          {{ tc.description || 'No description' }} • Created {{ formatDate(tc.createdAt) }}
+          <span *ngIf="tc.lastRunAt"> • Last run {{ formatDate(tc.lastRunAt) }}</span>
+        </p>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex shrink-0 items-center gap-1.5">
+        <button type="button" (click)="runTestCase(tc)" [disabled]="runningCaseId() === tc.id"
+          class="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50">
+          <lucide-icon [name]="runningCaseId() === tc.id ? 'refresh-cw' : 'circle-play'"
+            class="h-3.5 w-3.5" [class.animate-spin]="runningCaseId() === tc.id"></lucide-icon>
+          {{ runningCaseId() === tc.id ? 'Running…' : 'Run' }}
+        </button>
+        <button type="button" (click)="loadAndEvaluate(tc)"
+          class="flex items-center gap-1.5 rounded border border-neutral-300 px-3 py-1.5 text-xs font-bold text-secondary hover:bg-neutral-50">
+          <lucide-icon name="sliders-horizontal" class="h-3.5 w-3.5"></lucide-icon>
+          Inspect
+        </button>
+        <button type="button" (click)="toggleExpand(tc.id)"
+          class="rounded border border-neutral-200 p-1.5 text-neutral-400 hover:bg-neutral-100">
+          <lucide-icon [name]="isExpanded(tc.id) ? 'chevron-down' : 'chevron-right'" class="h-3.5 w-3.5"></lucide-icon>
+        </button>
+        <button type="button" (click)="deleteTestCase(tc)"
+          class="rounded border border-neutral-200 p-1.5 text-neutral-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600">
+          <lucide-icon name="archive" class="h-3.5 w-3.5"></lucide-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Expanded detail -->
+    <div *ngIf="isExpanded(tc.id)" class="border-t border-neutral-200">
+      <div class="grid grid-cols-2 gap-4 p-4 lg:grid-cols-3">
+        <!-- Snapshot per namespace -->
+        <div *ngFor="let entry of objectEntries(tc.snapshot)"
+          class="rounded border border-neutral-200 bg-neutral-50 p-3">
+          <div class="mb-1.5 flex items-center gap-1.5">
+            <lucide-icon name="layers" class="h-3.5 w-3.5 text-secondary"></lucide-icon>
+            <span class="text-[10px] font-bold uppercase tracking-wide text-neutral-600">{{ entry[0] }}</span>
+            <span *ngIf="tc.dbKeys[entry[0]]" class="font-mono text-[9px] text-neutral-400">({{ tc.dbKeys[entry[0]] }})</span>
+          </div>
+          <pre class="max-h-32 overflow-auto text-[10px] text-neutral-700 leading-4 whitespace-pre-wrap">{{ entry[1] | json }}</pre>
         </div>
       </div>
 
-      <div class="flex flex-col gap-2 rounded-lg border border-neutral-300 bg-white p-4 shadow-xs">
-        <h3 class="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">Current Configuration</h3>
-        <div class="space-y-2.5 rounded border border-neutral-200 bg-neutral-50 p-3 text-xs font-sans">
-          <div class="flex items-center justify-between"><span class="text-neutral-500">Engine Version:</span><span class="font-mono font-bold text-primary">2.4.1-stable</span></div>
-          <div class="flex items-center justify-between"><span class="text-neutral-500">Complexity:</span><span class="font-mono text-neutral-700">O(log n)</span></div>
-          <div class="flex items-center justify-between"><span class="text-neutral-500">Snapshot Tag:</span><span class="font-mono font-bold text-primary">s45</span></div>
-        </div>
-      </div>
-
-      <div class="flex flex-1 flex-col justify-between rounded-lg border border-neutral-300 bg-white p-4 shadow-xs">
-        <div>
-          <h3 class="mb-3 text-[10px] font-bold uppercase tracking-wider text-neutral-400">Coverage Heatmap</h3>
-          <div class="grid grid-cols-4 gap-2">
-            <div class="aspect-square rounded bg-primary opacity-90"></div>
-            <div class="aspect-square rounded bg-fidelity-green-bright"></div>
-            <div class="aspect-square rounded bg-primary opacity-60"></div>
-            <div class="aspect-square rounded bg-rose-500 opacity-80"></div>
-            <div class="aspect-square rounded bg-primary opacity-80"></div>
-            <div class="aspect-square rounded bg-neutral-200"></div>
-            <div class="aspect-square rounded bg-primary opacity-45"></div>
-            <div class="aspect-square rounded bg-fidelity-green-bright opacity-70"></div>
+      <!-- Run history -->
+      <div *ngIf="runsFor(tc.id).length > 0" class="border-t border-neutral-200 px-4 pb-3 pt-3">
+        <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">Run History</p>
+        <div class="flex flex-wrap gap-2">
+          <div *ngFor="let run of runsFor(tc.id)" class="flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-mono"
+            [ngClass]="run.evalResult.status === 'PASSED' ? 'border-green-200 bg-green-50 text-fidelity-green-bright' : 'border-red-200 bg-red-50 text-red-600'">
+            <lucide-icon [name]="run.evalResult.status === 'PASSED' ? 'circle-check' : 'octagon-x'" class="h-3 w-3"></lucide-icon>
+            {{ run.evalResult.status }} — {{ formatDate(run.runAt) }}
           </div>
         </div>
-        <div class="mt-4 select-none text-center text-[10px] text-neutral-400">Evaluated on v12-logical state rules</div>
-      </div>
-    </div>
-
-    <div class="flex min-h-0 flex-1 flex-col rounded-lg border border-neutral-300 bg-white shadow-xs">
-      <div class="flex shrink-0 items-center justify-between border-b border-neutral-300 bg-white p-4">
-        <h3 class="text-sm font-bold text-neutral-800">Pending Generations</h3>
-        <div class="flex items-center gap-3.5">
-          <span class="text-xs text-neutral-500">{{ filteredCases().length }} cases loaded</span>
-          <div class="h-4 w-px bg-neutral-300"></div>
-          <lucide-icon name="list-filter" class="h-4 w-4 cursor-pointer text-neutral-400 transition-colors hover:text-primary"></lucide-icon>
-        </div>
-      </div>
-      <div class="flex-1 overflow-auto">
-        <table class="w-full border-collapse text-left">
-          <thead class="sticky top-0 z-10 border-b border-neutral-300 bg-neutral-50 text-[10px] font-bold uppercase text-neutral-500">
-            <tr>
-              <th class="px-6 py-3">Case Identifier</th>
-              <th class="px-6 py-3">Strategy Focus</th>
-              <th class="px-6 py-3 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody class="text-xs text-neutral-700">
-            <tr *ngIf="!filteredCases().length"><td colspan="3" class="py-10 text-center text-neutral-400">Select custom generation strategies in the checklist.</td></tr>
-            <tr *ngFor="let pc of filteredCases()" (click)="selectedCaseId.set(pc.name)" class="cursor-pointer border-b border-neutral-200 transition-colors hover:bg-neutral-50/50" [ngClass]="selectedCaseId() === pc.name ? 'border-l-4 border-primary bg-neutral-50' : ''">
-              <td class="px-6 py-4">
-                <div class="font-bold text-neutral-800">{{ pc.name }}</div>
-                <div class="text-[10px] text-neutral-400">{{ pc.description }}</div>
-              </td>
-              <td class="px-6 py-4"><span class="rounded border px-2 py-0.5 text-[10px] font-bold" [ngClass]="pc.bgClass || 'border-neutral-300 bg-neutral-100 text-neutral-800'">{{ pc.focus }}</span></td>
-              <td class="px-6 py-4 text-right" (click)="$event.stopPropagation()">
-                <button type="button" (click)="runTestCase(pc.id)" class="rounded-full p-1.5 text-neutral-500 outline-none transition-colors hover:bg-neutral-200/70 hover:text-primary" title="Generate payload">
-                  <lucide-icon name="play" class="h-4 w-4 fill-current" [class.animate-spin]="runCaseId() === pc.id" [class.text-primary]="runCaseId() === pc.id"></lucide-icon>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs lg:w-80">
-      <div class="flex shrink-0 items-center justify-between border-b border-neutral-300 bg-neutral-50 p-4">
-        <h3 class="text-xs font-bold uppercase tracking-tight text-neutral-800">Snapshot Preview</h3>
-        <span class="rounded bg-primary px-2 py-0.5 text-[9px] font-bold uppercase text-white">TAG: s45</span>
-      </div>
-      <div class="flex flex-1 flex-col overflow-y-auto bg-[#111] p-4 font-mono text-xs text-[#ccc] select-text">
-        <div class="mb-3 flex items-center gap-2.5 rounded-md border p-3 font-semibold select-none" [ngClass]="activePreview().expected === 'TRUE' ? 'border-green-900/30 bg-green-950/40 text-emerald-400' : 'border-red-900/30 bg-red-950/40 text-red-400'">
-          <lucide-icon name="circle-check" class="h-4.5 w-4.5 shrink-0" [ngClass]="activePreview().expected === 'TRUE' ? 'text-emerald-500' : 'text-red-500'"></lucide-icon>
-          <span class="text-[10px] font-bold uppercase tracking-wide">Expected Result: {{ activePreview().expected }}</span>
-        </div>
-        <pre class="flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed">{{ activePreview().code }}</pre>
-      </div>
-      <div class="flex shrink-0 flex-col gap-3 border-t border-neutral-300 bg-neutral-50 p-4 text-xs">
-        <div class="flex flex-col gap-1">
-          <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Logic Explanation</span>
-          <p class="text-xs leading-relaxed text-neutral-700">{{ activePreview().explanation }}</p>
-        </div>
-        <button type="button" (click)="copyPreview()" class="flex w-full items-center justify-center gap-2 rounded-md border border-primary bg-white py-2 text-xs font-bold text-primary transition-colors hover:bg-green-50">
-          <lucide-icon [name]="isCopied() ? 'clipboard-check' : 'clipboard'" class="h-4 w-4 text-primary"></lucide-icon>
-          {{ isCopied() ? 'Copied!' : 'Copy JSON to Clipboard' }}
-        </button>
       </div>
     </div>
   </div>
