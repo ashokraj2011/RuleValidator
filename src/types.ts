@@ -1,5 +1,85 @@
 export type ActiveTab = 'overview' | 'test-data' | 'generated' | 'test-runs' | 'coverage';
 
+// --- Rule Grammar Types ---
+
+export type ComparisonOperator =
+  | 'equal_to'
+  | 'not_equal_to'
+  | 'greater_than'
+  | 'greater_than_equal'
+  | 'less_than'
+  | 'less_than_equal'
+  | 'contains'
+  | 'not_contains'
+  | 'in'
+  | 'not_in'
+  | 'exists'
+  | 'not_exists';
+
+export type LogicalOperator = 'AND' | 'OR' | 'NOT';
+
+// A leaf term that compares a namespace.attribute against a value
+export interface ComparisonTerm {
+  namespace: string;
+  attribute: string;
+  operator: ComparisonOperator;
+  value: any;
+}
+
+// A logical grouping of terms (AND/OR/NOT)
+export interface LogicalTerm {
+  operator: LogicalOperator;
+  terms: Term[];
+}
+
+// A reference to another rule (for chaining)
+export interface RuleRefTerm {
+  rule_ref: string;
+}
+
+export type Term = ComparisonTerm | LogicalTerm | RuleRefTerm;
+
+export interface Rule {
+  rule_id: string;
+  name: string;
+  terms: LogicalTerm;
+}
+
+// --- Namespace Data (test data per namespace) ---
+
+export interface NamespaceData {
+  [key: string]: any;
+}
+
+// All test data keyed by namespace
+export interface TestDataSnapshot {
+  [namespace: string]: NamespaceData;
+}
+
+// Track DB key + fetched data per namespace
+export interface NamespaceConfig {
+  namespace: string;
+  dbKey: string;
+  data: NamespaceData;
+  isFetched: boolean;
+  isEdited: boolean;
+}
+
+// --- Evaluation Result Types ---
+
+export interface EvalResult {
+  expression: string;
+  namespace?: string;
+  attribute?: string;
+  operator: string;
+  expected: any;
+  actual: any;
+  status: 'PASSED' | 'FAILED' | 'SKIPPED';
+  children?: EvalResult[];
+}
+
+// --- Existing types (kept for compatibility) ---
+
 export interface TestCaseRun {
   id: string;
   name: string;
@@ -43,13 +123,7 @@ export interface CoverageItem {
 }
 
 export interface Dataset {
-  customer: {
-    id: string;
-    age: number;
-    status: 'ACTIVE' | 'INACTIVE' | 'PROSPECT' | string;
-    tags: string[];
-    last_login: string;
-  };
+  [key: string]: any;
 }
 
 export interface EvaluationNode {

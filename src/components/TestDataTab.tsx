@@ -1,434 +1,485 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Code, 
-  TableProperties, 
   Database, 
-  Upload, 
   Save, 
   Sparkles, 
   CheckCircle, 
-  PlusCircle, 
-  Edit3, 
   ChevronRight,
-  Info
+  ChevronDown,
+  Info,
+  Download,
+  RefreshCw,
+  Edit3,
+  Search,
+  Layers,
+  AlertTriangle,
+  PlayCircle
 } from 'lucide-react';
-import { Dataset } from '../types';
+import { Rule, NamespaceConfig, TestDataSnapshot } from '../types';
+import { extractNamespaces, extractNamespaceAttributes } from '../ruleEngine';
+import { fetchFromDb, getAvailableKeys } from '../mockDb';
 
 interface TestDataTabProps {
-  dataset: Dataset;
-  setDataset: React.Dispatch<React.SetStateAction<Dataset>>;
+  rule: Rule;
+  allRules: Rule[];
+  testData: TestDataSnapshot;
+  setTestData: React.Dispatch<React.SetStateAction<TestDataSnapshot>>;
   onSwitchTab: (tab: 'overview' | 'test-data' | 'generated' | 'test-runs' | 'coverage') => void;
-  setRuleStatus: (status: string) => void;
+  onRunTest: () => void;
 }
 
 export default function TestDataTab({
-  dataset,
-  setDataset,
+  rule,
+  allRules,
+  testData,
+  setTestData,
   onSwitchTab,
-  setRuleStatus
+  onRunTest,
 }: TestDataTabProps) {
-  const [viewMode, setViewMode] = useState<'json' | 'table'>('json');
-  const [source, setSource] = useState('Production Snapshot (Latest)');
-  const [rawJsonText, setRawJsonText] = useState(JSON.stringify(dataset, null, 2));
-  const [jsonError, setJsonError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [expandedNs, setExpandedNs] = useState<Set<string>>(new Set());
+  const [nsConfigs, setNsConfigs] = useState<Record<string, NamespaceConfig>>({});
+  const [loadingNs, setLoadingNs] = useState<Set<string>>(new Set());
+  const [editingJson, setEditingJson] = useState<Record<string, string>>({});
+  const [jsonErrors, setJsonErrors] = useState<Record<string, string>>({});
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Sync edits from JSON string to state
-  const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    setRawJsonText(text);
+  // Extract namespaces & attributes from the current rule (including chained rules)
+  const namespaces = useMemo(() => extractNamespaces(rule, allRules), [rule, allRules]);
+  const nsAttributes = useMemo(() => extractNamespaceAttributes(rule, allRules), [rule, allRules]);
+
+  // Initialize namespace configs when rule changes
+  useEffect(() => {
+    const newConfigs: Record<string, NamespaceConfig> = {};
+    const newExpanded = new Set<string>();
+    for (const ns of namespaces) {
+      if (nsConfigs[ns]) {
+        newConfigs[ns] = nsConfigs[ns];
+      } else {
+        newConfigs[ns] = {
+          namespace: ns,
+          dbKey: '',
+          data: testData[ns] || {},
+          isFetched: !!testData[ns],
+          isEdited: false,
+        };
+      }
+      newExpanded.add(ns);
+    }
+    setNsConfigs(newConfigs);
+    setExpandedNs(newExpanded);
+  }, [namespaces.join(',')]);
+
+  const toggleNs = (ns: string) => {
+    setExpandedNs(prev => {
+      const next = new Set(prev);
+      if (next.has(ns)) next.delete(ns);
+      else next.add(ns);
+      return next;
+    });
+  };
+
+  // Fetch data from DB for a namespace
+  const handleFetch = async (ns: string) => {
+    const config = nsConfigs[ns];
+    if (!config?.dbKey) {
+      showToast(`⚠️ Enter a DB key for "${ns}" before fetching.`);
+      return;
+    }
+
+    setLoadingNs(prev => new Set(prev).add(ns));
+
+    const data = await fetchFromDb(ns, config.dbKey);
+    
+    setLoadingNs(prev => {
+      const next = new Set(prev);
+      next.delete(ns);
+      return next;
+    });
+
+    if (data) {
+      const updated = { ...nsConfigs };
+      updated[ns] = { ...updated[ns], data, isFetched: true, isEdited: false };
+      setNsConfigs(updated);
+
+      // Sync to testData
+      setTestData(prev => ({ ...prev, [ns]: data }));
+      setEditingJson(prev => ({ ...prev, [ns]: JSON.stringify(data, null, 2) }));
+      setJsonErrors(prev => { const next = { ...prev }; delete next[ns]; return next; });
+      showToast(`✅ Fetched "${ns}" data for key "${config.dbKey}" successfully.`);
+    } else {
+      showToast(`❌ No data found for "${ns}" with key "${config.dbKey}".`);
+    }
+  };
+
+  // Update DB key for a namespace
+  const updateDbKey = (ns: string, key: string) => {
+    setNsConfigs(prev => ({
+      ...prev,
+      [ns]: { ...prev[ns], dbKey: key },
+    }));
+  };
+
+  // Handle JSON edit for a namespace
+  const handleJsonEdit = (ns: string, text: string) => {
+    setEditingJson(prev => ({ ...prev, [ns]: text }));
 
     try {
       const parsed = JSON.parse(text);
-      if (parsed && typeof parsed === 'object' && parsed.customer) {
-        setDataset(parsed as Dataset);
-        setJsonError(null);
-      } else {
-        setJsonError("Invalid schema format. Must contain a root 'customer' object.");
-      }
+      setJsonErrors(prev => { const next = { ...prev }; delete next[ns]; return next; });
+      setNsConfigs(prev => ({
+        ...prev,
+        [ns]: { ...prev[ns], data: parsed, isEdited: true },
+      }));
+      setTestData(prev => ({ ...prev, [ns]: parsed }));
     } catch (err: any) {
-      setJsonError(`JSON Syntax Error: ${err.message}`);
+      setJsonErrors(prev => ({ ...prev, [ns]: err.message }));
     }
   };
 
-  // Sync edits from form inputs back to JSON text in state
-  const updateField = (path: string, val: any) => {
-    const updated = { ...dataset };
-    if (path === 'id') updated.customer.id = val;
-    else if (path === 'age') updated.customer.age = Number(val);
-    else if (path === 'status') updated.customer.status = val;
-    
-    setDataset(updated);
-    setRawJsonText(JSON.stringify(updated, null, 2));
-    
-    // Check if status is INACTIVE and age is < 30 (triggers validation failure risk dynamically!)
-    if (updated.customer.status === 'INACTIVE' && updated.customer.age < 30) {
-      setRuleStatus("Degraded (Validation Risk Detected)");
-    } else {
-      setRuleStatus("Active");
-    }
-  };
-
-  const handleFixDataPattern = () => {
-    // Automatically optimize: change status to ACTIVE or set age to 35
-    const updated = { ...dataset };
-    updated.customer.age = 32;
-    updated.customer.status = 'ACTIVE';
-    setDataset(updated);
-    setRawJsonText(JSON.stringify(updated, null, 2));
-    setRuleStatus("Active");
-    showToast("✨ Applied AI Fix: Adjusted customer status to 'ACTIVE' and age to '32' to clear validation errors!");
-  };
-
-  const handleSave = () => {
-    if (jsonError) {
-      showToast("❌ Unable to save. Please resolve schema errors first.");
+  // Save all test data
+  const handleSaveAll = () => {
+    const hasErrors = Object.keys(jsonErrors).length > 0;
+    if (hasErrors) {
+      showToast('❌ Fix JSON errors before saving.');
       return;
     }
-    showToast("💾 Test case 'customer.json' successfully saved to Workspace Sandbox-01.");
+    showToast('💾 Test data snapshot saved successfully.');
   };
 
-  const handleUploadSample = () => {
-    const sample: Dataset = {
-      customer: {
-        id: "USR-9941-K",
-        age: 41,
-        status: "ACTIVE",
-        tags: ["VIP", "LOYALTY_PROGRAM", "HIGH_VALUE"],
-        last_login: new Date().toISOString()
-      }
-    };
-    setDataset(sample);
-    setRawJsonText(JSON.stringify(sample, null, 2));
-    setJsonError(null);
-    showToast("Uploaded and pre-loaded sample customer JSON case.");
-  };
-
-  const handleGenerateSynthetic = () => {
-    const randomId = `USR-${Math.floor(1000 + Math.random() * 9000)}-XYZ`;
-    const randomAge = Math.floor(18 + Math.random() * 85);
-    const statuses = ['ACTIVE', 'INACTIVE', 'PROSPECT'];
-    const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-    
-    const synthetic: Dataset = {
-      customer: {
-        id: randomId,
-        age: randomAge,
-        status: randomStatus,
-        tags: ["SYNTHETIC", randomStatus === 'ACTIVE' ? 'VIP' : 'PROBATION'],
-        last_login: new Date().toISOString()
-      }
-    };
-    setDataset(synthetic);
-    setRawJsonText(JSON.stringify(synthetic, null, 2));
-    setJsonError(null);
-    showToast(`✨ Generated synthetic test case ${randomId} successfully.`);
-    if (randomStatus === 'INACTIVE' && randomAge < 30) {
-      setRuleStatus("Degraded (Validation Risk Detected)");
-    } else {
-      setRuleStatus("Active");
-    }
-  };
+  const allNamespacesReady = namespaces.every(ns => {
+    const config = nsConfigs[ns];
+    return config && (config.isFetched || Object.keys(config.data).length > 0);
+  });
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white border border-neutral-300 rounded-lg overflow-hidden shadow-sm">
-      {/* Toast Alert Feedback */}
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 bg-neutral-900 text-white px-5 py-3 rounded bg-amber-950 font-sans shadow-xl border border-primary flex items-center gap-3 animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-50 bg-neutral-900 text-white px-5 py-3 rounded shadow-xl border border-primary flex items-center gap-3 animate-fade-in">
           <Sparkles className="w-5 h-5 text-yellow-500 shrink-0" />
           <span className="text-xs font-semibold">{toastMessage}</span>
         </div>
       )}
 
-      {/* Toolbar Headers */}
-      <div className="h-14 flex items-center justify-between px-5 border-b border-neutral-300 bg-neutral-50 shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="flex bg-neutral-200/80 rounded-md p-0.5 border border-neutral-300 gap-0.5">
-            <button 
-              type="button"
-              className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-all outline-none cursor-pointer ${viewMode === 'json' ? 'bg-white shadow-xs text-neutral-800' : 'text-neutral-500 hover:text-neutral-900'}`}
-              onClick={() => setViewMode('json')}
-            >
-              <Code className="w-3.5 h-3.5" />
-              JSON Editor
-            </button>
-            <button 
-              type="button"
-              className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-all outline-none cursor-pointer ${viewMode === 'table' ? 'bg-white shadow-xs text-neutral-800' : 'text-neutral-500 hover:text-neutral-900'}`}
-              onClick={() => setViewMode('table')}
-            >
-              <TableProperties className="w-3.5 h-3.5" />
-              Table View
-            </button>
+      {/* Header bar */}
+      <div className="h-14 flex items-center justify-between px-5 border-b border-neutral-300 bg-white shrink-0 rounded-t-lg border border-neutral-300">
+        <div className="flex items-center gap-3">
+          <Database className="w-4.5 h-4.5 text-primary" />
+          <div>
+            <span className="text-sm font-bold text-neutral-800">Test Data — </span>
+            <span className="text-sm font-bold text-primary">{rule.name}</span>
           </div>
-          <div className="h-5 w-px bg-neutral-300"></div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">SOURCE:</span>
-            <select 
-              value={source} 
-              onChange={(e) => {
-                setSource(e.target.value);
-                showToast(`Switched source to ${e.target.value}`);
-              }}
-              className="bg-transparent border-none text-xs font-bold text-primary focus:ring-0 cursor-pointer p-0 select-none outline-none"
-            >
-              <option>Production Snapshot (Latest)</option>
-              <option>Development Mirror</option>
-              <option>Manual Override</option>
-            </select>
-          </div>
+          <span className="ml-2 px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] font-bold rounded uppercase">
+            {namespaces.length} Namespace{namespaces.length !== 1 ? 's' : ''}
+          </span>
         </div>
-
         <div className="flex items-center gap-2">
-          <button 
+          <button
             type="button"
-            onClick={handleUploadSample}
+            onClick={handleSaveAll}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-neutral-300 rounded text-xs font-semibold bg-white hover:bg-neutral-50 transition-colors"
           >
-            <Database className="w-3.5 h-3.5 text-neutral-500" />
-            Use Database Data
+            <Save className="w-3.5 h-3.5 text-neutral-500" />
+            Save Snapshot
           </button>
-          <button 
-            type="button"
-            onClick={handleGenerateSynthetic}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-primary text-primary rounded text-xs font-semibold bg-white hover:bg-green-50 transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-            Generate Synthetic
-          </button>
-          <button 
+          <button
             type="button"
             onClick={() => {
-              showToast("JSON Import wizard activated. Choose a valid .json config file.");
+              if (!allNamespacesReady) {
+                showToast('⚠️ Fetch or provide data for all namespaces before running.');
+                return;
+              }
+              onRunTest();
+              onSwitchTab('test-runs');
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-neutral-300 rounded text-xs font-semibold bg-white hover:bg-neutral-50 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-white rounded text-xs font-bold hover:opacity-90 transition-all"
           >
-            <Upload className="w-3.5 h-3.5 text-neutral-500" />
-            Upload JSON
-          </button>
-          <button 
-            type="button"
-            onClick={handleSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded text-xs font-semibold hover:shadow-xs transition-all"
-          >
-            <Save className="w-3.5 h-3.5" />
-            Save Test Case
+            <PlayCircle className="w-3.5 h-3.5" />
+            Evaluate Rule
           </button>
         </div>
       </div>
 
-      {/* Main split canvas */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Left Side Content (JSON or TABLE) */}
-        <div className="flex-1 min-h-0 flex flex-col bg-white">
-          <div className="flex items-center justify-between px-6 py-2 bg-neutral-100 border-b border-neutral-300">
-            <div className="flex items-center gap-2 text-xs font-semibold text-neutral-500">
-              <Code className="w-3.5 h-3.5" />
-              customer.json
-            </div>
-            <div className="flex items-center gap-4 text-xs font-semibold text-neutral-400">
-              <span>Lines: {rawJsonText.split('\n').length}</span>
-              <span>UTF-8</span>
-            </div>
-          </div>
+      {/* Main content — two columns */}
+      <div className="flex-1 min-h-0 flex overflow-hidden gap-5 mt-4">
 
-          {/* Conditional View Area */}
-          <div className="flex-1 overflow-auto p-0 flex flex-col">
-            {viewMode === 'json' ? (
-              <div className="flex-1 flex min-h-0 relative">
-                {/* Simulated line counts */}
-                <div className="w-12 bg-neutral-50 border-r border-neutral-350 text-right pr-3 pt-4 text-neutral-400 font-mono text-xs select-none">
-                  {rawJsonText.split('\n').map((_, index) => (
-                    <div key={index} className="leading-6">{index + 1}</div>
-                  ))}
+        {/* Left: Namespace data panels */}
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
+          {namespaces.map(ns => {
+            const config = nsConfigs[ns];
+            const isExpanded = expandedNs.has(ns);
+            const isLoading = loadingNs.has(ns);
+            const availableKeys = getAvailableKeys(ns);
+            const attrs = nsAttributes[ns] || [];
+            const jsonText = editingJson[ns] ?? (config?.data && Object.keys(config.data).length > 0 ? JSON.stringify(config.data, null, 2) : '');
+            const hasError = !!jsonErrors[ns];
+            const hasData = config && Object.keys(config.data).length > 0;
+
+            return (
+              <div key={ns} className="bg-white border border-neutral-300 rounded-lg overflow-hidden shadow-xs">
+                {/* Namespace header */}
+                <div
+                  className="flex items-center justify-between px-4 py-3 bg-neutral-50 border-b border-neutral-300 cursor-pointer select-none hover:bg-neutral-100 transition-colors"
+                  onClick={() => toggleNs(ns)}
+                >
+                  <div className="flex items-center gap-3">
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4 text-neutral-500" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-neutral-500" />
+                    )}
+                    <Layers className="w-4 h-4 text-secondary" />
+                    <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">{ns}</span>
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      [{attrs.join(', ')}]
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasData && !hasError && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-fidelity-green-bright">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {config?.isEdited ? 'EDITED' : 'FETCHED'}
+                      </span>
+                    )}
+                    {hasError && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-red-600">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        JSON ERROR
+                      </span>
+                    )}
+                    {!hasData && !hasError && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600">
+                        <Info className="w-3.5 h-3.5" />
+                        NO DATA
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {/* Live edit text area */}
-                <textarea
-                  className="flex-1 p-4 bg-white text-neutral-800 font-mono text-sm leading-6 outline-none focus:outline-none border-none resize-none ring-0 focus:ring-0 whitespace-pre"
-                  value={rawJsonText}
-                  onChange={handleJsonChange}
-                  spellCheck="false"
-                />
-                
-                {jsonError && (
-                  <div className="absolute bottom-4 left-16 right-4 bg-red-50 text-red-700 text-xs py-2 px-3 border border-red-200 rounded flex items-center gap-2 font-mono">
-                    <Info className="w-4 h-4 shrink-0" />
-                    <span>{jsonError}</span>
+
+                {isExpanded && (
+                  <div className="p-4 space-y-3">
+                    {/* DB Key fetch row */}
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">
+                          DB Lookup Key
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" />
+                            <input
+                              type="text"
+                              value={config?.dbKey || ''}
+                              onChange={e => updateDbKey(ns, e.target.value)}
+                              placeholder={availableKeys.length > 0 ? `e.g. ${availableKeys[0]}` : `Enter ${ns} key...`}
+                              className="w-full pl-8 pr-3 py-2 border border-neutral-300 rounded text-xs font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                              list={`keys-${ns}`}
+                            />
+                            <datalist id={`keys-${ns}`}>
+                              {availableKeys.map(k => (
+                                <option key={k} value={k} />
+                              ))}
+                            </datalist>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleFetch(ns)}
+                            disabled={isLoading}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-white rounded text-xs font-bold hover:opacity-90 transition-all disabled:opacity-50"
+                          >
+                            {isLoading ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            {isLoading ? 'Fetching...' : 'Fetch'}
+                          </button>
+                        </div>
+                        {availableKeys.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {availableKeys.map(k => (
+                              <button
+                                key={k}
+                                type="button"
+                                onClick={() => {
+                                  updateDbKey(ns, k);
+                                }}
+                                className={`px-2 py-0.5 text-[10px] font-mono border rounded cursor-pointer transition-colors ${
+                                  config?.dbKey === k
+                                    ? 'bg-secondary text-white border-secondary'
+                                    : 'bg-neutral-50 text-neutral-600 border-neutral-250 hover:border-secondary hover:text-secondary'
+                                }`}
+                              >
+                                {k}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Editable JSON panel */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <Code className="w-3.5 h-3.5" />
+                          Data Snapshot
+                          {config?.isEdited && (
+                            <span className="text-amber-600 normal-case">(edited — test grounded on this data)</span>
+                          )}
+                        </label>
+                        <span className="text-[10px] text-neutral-400 font-mono">
+                          {jsonText ? `${jsonText.split('\n').length} lines` : 'empty'}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <div className="flex border border-neutral-300 rounded overflow-hidden">
+                          {/* Line numbers */}
+                          <div className="w-8 bg-neutral-50 border-r border-neutral-200 text-right pr-2 pt-3 text-neutral-400 font-mono text-[10px] select-none shrink-0">
+                            {(jsonText || '\n').split('\n').map((_, i) => (
+                              <div key={i} className="leading-5">{i + 1}</div>
+                            ))}
+                          </div>
+                          <textarea
+                            className="flex-1 p-3 bg-white text-neutral-800 font-mono text-xs leading-5 outline-none border-none resize-none ring-0 focus:ring-0 whitespace-pre min-h-[120px]"
+                            value={jsonText}
+                            onChange={e => handleJsonEdit(ns, e.target.value)}
+                            placeholder={`{\n  "key": "value"\n}`}
+                            spellCheck={false}
+                            rows={Math.max(5, (jsonText || '').split('\n').length)}
+                          />
+                        </div>
+                        {jsonErrors[ns] && (
+                          <div className="mt-1 bg-red-50 text-red-700 text-[10px] py-1.5 px-3 border border-red-200 rounded flex items-center gap-1.5 font-mono">
+                            <Info className="w-3.5 h-3.5 shrink-0" />
+                            {jsonErrors[ns]}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Attributes used by rule */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase">Used in rule:</span>
+                      {attrs.map(attr => (
+                        <span
+                          key={attr}
+                          className={`px-2 py-0.5 text-[10px] font-mono rounded border ${
+                            hasData && config?.data[attr] !== undefined
+                              ? 'bg-green-50 text-fidelity-green-bright border-green-200 font-bold'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                        >
+                          {attr}: {hasData && config?.data[attr] !== undefined
+                            ? JSON.stringify(config.data[attr])
+                            : 'missing'}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="p-6">
-                <table className="w-full border border-neutral-300 border-collapse rounded">
-                  <thead>
-                    <tr className="bg-neutral-50 border-b border-neutral-300 text-xs font-semibold text-neutral-600">
-                      <th className="px-4 py-2 text-left border-r border-neutral-300">Field Path</th>
-                      <th className="px-4 py-2 text-left border-r border-neutral-300">Type</th>
-                      <th className="px-4 py-2 text-left">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-xs font-mono text-neutral-800 divide-y divide-neutral-250">
-                    <tr className="hover:bg-neutral-50">
-                      <td className="px-4 py-3 border-r border-neutral-300 text-primary font-bold">customer.id</td>
-                      <td className="px-4 py-3 border-r border-neutral-300">
-                        <span className="px-2 py-0.5 rounded bg-neutral-200 text-[10px] uppercase font-bold text-neutral-600">String</span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <input 
-                          type="text" 
-                          value={dataset.customer.id} 
-                          onChange={(e) => updateField('id', e.target.value)}
-                          className="w-full border-none p-0 focus:ring-0 text-xs font-bold font-mono outline-none text-neutral-900 bg-transparent"
-                        />
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-neutral-50">
-                      <td className="px-4 py-3 border-r border-neutral-300 text-primary font-bold">customer.age</td>
-                      <td className="px-4 py-3 border-r border-neutral-300">
-                        <span className="px-2 py-0.5 rounded bg-neutral-200 text-[10px] uppercase font-bold text-neutral-600">Number</span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <input 
-                          type="number" 
-                          value={dataset.customer.age} 
-                          onChange={(e) => updateField('age', e.target.value)}
-                          className="w-full border-none p-0 focus:ring-0 text-xs font-bold font-mono outline-none text-neutral-900 bg-transparent"
-                        />
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-neutral-50">
-                      <td className="px-4 py-3 border-r border-neutral-300 text-primary font-bold">customer.status</td>
-                      <td className="px-4 py-3 border-r border-neutral-300">
-                        <span className="px-2 py-0.5 rounded bg-neutral-200 text-[10px] uppercase font-bold text-neutral-600">Enum</span>
-                      </td>
-                      <td className="px-4 py-1.5">
-                        <select 
-                          value={dataset.customer.status} 
-                          onChange={(e) => updateField('status', e.target.value)}
-                          className="w-full border-none p-0 focus:ring-0 text-xs font-bold font-mono outline-none text-neutral-900 bg-transparent cursor-pointer"
-                        >
-                          <option value="ACTIVE">ACTIVE</option>
-                          <option value="INACTIVE">INACTIVE</option>
-                          <option value="PENDING">PENDING</option>
-                        </select>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-neutral-50">
-                      <td className="px-4 py-3 border-r border-neutral-300 text-primary font-bold">customer.tags</td>
-                      <td className="px-4 py-3 border-r border-neutral-300">
-                        <span className="px-2 py-0.5 rounded bg-neutral-200 text-[10px] uppercase font-bold text-neutral-600">Array</span>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-neutral-500">
-                        {`[${dataset.customer.tags.map(t => `"${t}"`).join(', ')}]`}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="mt-4 flex justify-center">
-                  <button 
-                    type="button"
-                    onClick={() => showToast("Add row form is loaded in sandbox namespace limits.")}
-                    className="flex justify-center items-center gap-1.5 text-neutral-500 hover:text-primary transition-colors text-xs font-bold"
-                  >
-                    <PlusCircle className="w-4 h-4 text-neutral-400" />
-                    Add New Data Row
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer Status Bar with mock metadata */}
-          <div className="h-8 bg-neutral-100 border-t border-neutral-300 flex items-center px-6 justify-between shrink-0 font-sans text-[10px] text-neutral-500">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-fidelity-green-bright shrink-0"></span>
-                <span className="font-bold text-neutral-600 uppercase tracking-wider">Validation Ready</span>
-              </div>
-              <div className="h-3 w-px bg-neutral-300"></div>
-              <span>JSON Schema Match: <b className="text-fidelity-green-bright font-bold">100%</b></span>
-            </div>
-            <div className="flex items-center gap-4 font-semibold text-neutral-600">
-              <span>Namespace: <b>customer</b></span>
-              <span>Primary Key: <b className="text-primary">id</b></span>
-              <span>Workspace: <b>sandbox-01</b></span>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
-        {/* Right Side Inspector Panel */}
-        <aside className="w-80 border-l border-neutral-300 bg-neutral-50 p-5 hidden xl:block overflow-y-auto">
-          <h3 className="font-bold text-sm text-neutral-800 mb-4 uppercase tracking-tight">Schema Guide</h3>
-          
-          <button 
-            type="button"
-            onClick={() => showToast("Define Schema popup triggers schema field editor modal.")}
-            className="w-full mb-4 flex items-center justify-between px-3 py-2 bg-neutral-100 border border-neutral-300 rounded text-xs font-bold text-neutral-600 hover:border-primary hover:text-primary transition-all"
-          >
-            <span className="flex items-center gap-1.5">
-              <Edit3 className="w-4 h-4 text-neutral-400" />
-              Define Schema &amp; PK
-            </span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        {/* Right: Rule JSON reference */}
+        <aside className="w-80 shrink-0 hidden xl:flex flex-col gap-4 overflow-y-auto">
+          {/* Rule JSON */}
+          <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden shadow-xs">
+            <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-300 flex items-center gap-2">
+              <Code className="w-4 h-4 text-secondary" />
+              <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">Rule Definition</span>
+            </div>
+            <div className="p-3 bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[11px] leading-5 overflow-auto max-h-[400px]">
+              <pre className="whitespace-pre-wrap">{JSON.stringify(rule, null, 2)}</pre>
+            </div>
+          </div>
 
-          <div className="space-y-4">
-            <div className="p-4 rounded bg-white border border-neutral-300">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-primary font-mono">customer.status</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-neutral-250 uppercase font-bold text-neutral-600">Enum</span>
+          {/* Chained rules info */}
+          {allRules.length > 1 && (
+            <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden shadow-xs">
+              <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-300 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-secondary" />
+                <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">Chained Rules</span>
               </div>
-              <p className="text-xs text-neutral-500 mb-2.5">
-                Defines the current eligibility status of the customer record.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {['ACTIVE', 'INACTIVE', 'PROSPECT'].map((s) => (
-                  <span key={s} className={`px-2 py-0.5 rounded text-[10px] font-mono border font-semibold ${dataset.customer.status === s ? 'bg-primary border-primary text-white' : 'bg-neutral-100 text-neutral-500 border-neutral-250'}`}>
-                    {s}
-                  </span>
+              <div className="p-3 space-y-2">
+                {allRules.map(r => (
+                  <div
+                    key={r.rule_id}
+                    className={`p-2 rounded border text-xs ${
+                      r.rule_id === rule.rule_id
+                        ? 'bg-primary/10 border-primary text-primary font-bold'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-600'
+                    }`}
+                  >
+                    <span className="font-mono text-[10px] text-neutral-400">{r.rule_id}</span>
+                    <div className="font-semibold">{r.name}</div>
+                  </div>
                 ))}
               </div>
             </div>
+          )}
 
-            <div className="p-4 rounded bg-white border border-neutral-300">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-primary font-mono">customer.age</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-neutral-250 uppercase font-bold text-neutral-600">Integer</span>
-              </div>
-              <p className="text-xs text-neutral-500 leading-relaxed">
-                Must be between 18 and 120. Used in validation Rule: <code className="bg-neutral-105 font-mono text-[10px] text-neutral-600 px-1 py-0.5 border border-neutral-200">Eligibility_V4.3</code>
-              </p>
+          {/* Data readiness summary */}
+          <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden shadow-xs">
+            <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-300">
+              <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">Data Readiness</span>
             </div>
-
-            {/* Glowing AI Insights Widget Card */}
-            <div className="relative mt-6 group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-fidelity-green-bright rounded-lg blur-xs opacity-25 group-hover:opacity-40 transition duration-300"></div>
-              <div className="relative bg-white border border-neutral-250 p-4 rounded-lg">
-                <div className="flex items-center gap-1.5 mb-2 text-primary font-bold text-xs uppercase tracking-wider">
-                  <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
-                  <span>AI Insights</span>
-                </div>
-                <p className="text-xs text-neutral-500 leading-relaxed">
-                  Based on your rule history, <span className="font-bold">"status": "INACTIVE"</span> with <span className="font-bold">"age" &lt; 30</span> triggers validation errors in the active Eligibility validation tree.
-                </p>
-                <div className="mt-3 pt-1">
-                  <button 
-                    type="button"
-                    onClick={handleFixDataPattern}
-                    className="w-full py-1.5 text-xs font-bold border border-primary text-primary rounded hover:bg-primary hover:text-white transition-all bg-transparent cursor-pointer"
-                  >
-                    Fix Data Pattern
-                  </button>
+            <div className="p-3 space-y-2">
+              {namespaces.map(ns => {
+                const config = nsConfigs[ns];
+                const ready = config && Object.keys(config.data).length > 0;
+                return (
+                  <div key={ns} className="flex items-center justify-between text-xs">
+                    <span className="font-mono font-bold text-neutral-700">{ns}</span>
+                    {ready ? (
+                      <span className="flex items-center gap-1 text-fidelity-green-bright font-bold">
+                        <CheckCircle className="w-3.5 h-3.5" /> Ready
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-amber-600 font-bold">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Needs data
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="pt-2 border-t border-neutral-200 mt-2">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className="text-neutral-600">Overall</span>
+                  {allNamespacesReady ? (
+                    <span className="text-fidelity-green-bright">✓ Ready to evaluate</span>
+                  ) : (
+                    <span className="text-amber-600">⚠ Incomplete</span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </aside>
+      </div>
+
+      {/* Footer */}
+      <div className="h-8 bg-neutral-100 border-t border-neutral-300 flex items-center px-6 justify-between shrink-0 font-sans text-[10px] text-neutral-500 rounded-b-lg border-x">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${allNamespacesReady ? 'bg-fidelity-green-bright' : 'bg-amber-500'} shrink-0`}></span>
+            <span className="font-bold text-neutral-600 uppercase tracking-wider">
+              {allNamespacesReady ? 'All Namespaces Ready' : 'Data Incomplete'}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 font-semibold text-neutral-600">
+          <span>Rule: <b className="text-primary">{rule.rule_id}</b></span>
+          <span>Namespaces: <b>{namespaces.join(', ')}</b></span>
+        </div>
       </div>
     </div>
   );
