@@ -30,6 +30,22 @@ export class TestDataTabComponent {
     this.ruleEngine.extractNamespaceAttributes(this.store.selectedRule(), this.store.allRules()),
   );
 
+  /** Namespaces fetched from the database (everything that is not session/context). */
+  readonly dbNamespaces = computed(() => this.namespaces().filter((ns) => !this.ruleEngine.isSessionNamespace(ns)));
+  /** Session namespaces (supplied by the calling application), with their attributes. */
+  readonly sessionNamespaceAttrs = computed<Record<string, string[]>>(() => {
+    const attrs = this.namespaceAttributes();
+    const out: Record<string, string[]> = {};
+    for (const ns of Object.keys(attrs)) {
+      if (this.ruleEngine.isSessionNamespace(ns)) out[ns] = attrs[ns];
+    }
+    return out;
+  });
+  readonly hasSessionData = computed(() => Object.keys(this.sessionNamespaceAttrs()).length > 0);
+
+  /** Session field values keyed by "namespace.attribute". */
+  readonly sessionValues = signal<Record<string, string>>({});
+
   readonly expandedNamespaces = signal<Set<string>>(new Set());
   readonly namespaceConfigs = signal<Record<string, NamespaceConfig>>({});
   readonly loadingNamespaces = signal<Set<string>>(new Set());
@@ -52,7 +68,7 @@ export class TestDataTabComponent {
   readonly saveExpected = signal<'PASSED' | 'FAILED' | 'NONE'>('NONE');
 
   readonly allNamespacesReady = computed(() =>
-    this.namespaces().every((namespace) => {
+    this.dbNamespaces().every((namespace) => {
       const config = this.namespaceConfigs()[namespace];
       return !!config && (config.isFetched || Object.keys(config.data).length > 0);
     }),
@@ -61,9 +77,80 @@ export class TestDataTabComponent {
   constructor() {
     effect(() => {
       this.store.selectedRuleId();
-      const namespaces = this.namespaces();
-      untracked(() => this.initializeNamespaceConfigs(namespaces));
+      const namespaces = this.dbNamespaces();
+      const sessionAttrs = this.sessionNamespaceAttrs();
+      untracked(() => {
+        this.initializeNamespaceConfigs(namespaces);
+        this.initializeSessionValues(sessionAttrs);
+      });
     });
+  }
+
+  /** Seed session field values from the current snapshot (calling-app supplied data). */
+  private initializeSessionValues(sessionAttrs: Record<string, string[]>) {
+    const snapshot = this.store.testData();
+    const values: Record<string, string> = {};
+    for (const ns of Object.keys(sessionAttrs)) {
+      for (const attr of sessionAttrs[ns]) {
+        const current = snapshot[ns]?.[attr];
+        values[`${ns}.${attr}`] = current === undefined ? '' : this.valueToText(current);
+      }
+    }
+    this.sessionValues.set(values);
+    this.commitSessionData(values, sessionAttrs);
+  }
+
+  sessionValue(ns: string, attr: string): string {
+    return this.sessionValues()[`${ns}.${attr}`] ?? '';
+  }
+
+  setSessionValue(ns: string, attr: string, text: string) {
+    const next = { ...this.sessionValues(), [`${ns}.${attr}`]: text };
+    this.sessionValues.set(next);
+    this.commitSessionData(next, this.sessionNamespaceAttrs());
+  }
+
+  sessionTypeHint(ns: string, attr: string): string {
+    return this.typeOfText(this.sessionValue(ns, attr));
+  }
+
+  /** Write session field values into the store snapshot so evaluation uses them. */
+  private commitSessionData(values: Record<string, string>, sessionAttrs: Record<string, string[]>) {
+    const snapshot = { ...this.store.testData() };
+    for (const ns of Object.keys(sessionAttrs)) {
+      const data: NamespaceData = { ...(snapshot[ns] ?? {}) };
+      for (const attr of sessionAttrs[ns]) {
+        const text = values[`${ns}.${attr}`];
+        if (text !== undefined && text.trim() !== '') {
+          data[attr] = this.textToValue(text);
+        } else {
+          delete data[attr];
+        }
+      }
+      snapshot[ns] = data;
+    }
+    this.store.testData.set(snapshot);
+  }
+
+  // --- Invocation context (persona + request params) ---
+
+  setPersonaType(type: 'MID' | 'WID') {
+    this.store.invocation.update((c) => ({ ...c, personaType: type }));
+  }
+  setPersonaId(id: string) {
+    this.store.invocation.update((c) => ({ ...c, personaId: id }));
+  }
+  addRequestParam() {
+    this.store.invocation.update((c) => ({ ...c, requestParams: [...c.requestParams, { key: '', value: '' }] }));
+  }
+  removeRequestParam(i: number) {
+    this.store.invocation.update((c) => ({ ...c, requestParams: c.requestParams.filter((_, idx) => idx !== i) }));
+  }
+  updateRequestParam(i: number, field: 'key' | 'value', val: string) {
+    this.store.invocation.update((c) => ({
+      ...c,
+      requestParams: c.requestParams.map((p, idx) => (idx === i ? { ...p, [field]: val } : p)),
+    }));
   }
 
   private initializeNamespaceConfigs(namespaces: string[]) {
@@ -487,7 +574,7 @@ export class TestDataTabComponent {
     const configs = this.namespaceConfigs();
     const dbKeys: Record<string, string> = {};
     const snapshot = this.store.testData();
-    for (const ns of this.namespaces()) {
+    for (const ns of this.dbNamespaces()) {
       dbKeys[ns] = configs[ns]?.dbKey ?? '';
     }
 
@@ -500,6 +587,7 @@ export class TestDataTabComponent {
       ruleId: this.store.selectedRuleId(),
       dbKeys,
       snapshot: snapshotCopy,
+      invocation: JSON.parse(JSON.stringify(this.store.invocation())),
       createdAt: new Date().toISOString(),
       expectedResult: expected === 'NONE' ? undefined : expected,
       // Pin the data the expectation is based on so later runs can tell a real

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
-import { EvalResult, TestCase, TestCaseRunResult } from '../../models/types';
+import { EvalResult, InvocationContext, TestCase, TestCaseRunResult } from '../../models/types';
 import { MockDbService } from '../../services/mock-db.service';
 import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
@@ -223,5 +223,9 @@ export class GeneratedTestsTabComponent {
   }
 
   objectEntries(obj: Record<string, any>): [string, any][] { return Object.entries(obj); }
+
+  requestParamsText(inv: InvocationContext): string {
+    return inv.requestParams.map((p) => `${p.key}=${p.value}`).join(', ');
+  }
   getAvailableKeys(ns: string): string[] { return this.mockDb.getAvailableKeys(ns); }
 }

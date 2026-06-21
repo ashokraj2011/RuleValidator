@@ -114,4 +114,28 @@ export const SAMPLE_RULES: Rule[] = [
       ],
     },
   },
+  {
+    rule_id: 'rule_5',
+    name: 'Authenticated web session — adult US/CA customer',
+    terms: {
+      operator: 'AND',
+      terms: [
+        // Chain rule_1 — must be adult from US/CA (DB-backed customer data)
+        { rule_ref: 'rule_1' },
+        // Session data supplied by the calling application at evaluation time
+        {
+          namespace: 'session',
+          attribute: 'channel',
+          operator: 'equal_to',
+          value: 'WEB',
+        },
+        {
+          namespace: 'session',
+          attribute: 'authenticated',
+          operator: 'equal_to',
+          value: true,
+        },
+      ],
+    },
+  },
 ];

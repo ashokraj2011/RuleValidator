@@ -128,6 +128,16 @@
 
     <!-- Expanded detail -->
     <div *ngIf="isExpanded(tc.id)" class="border-t border-neutral-200">
+      <!-- Invocation context -->
+      <div *ngIf="tc.invocation as inv" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-neutral-100 bg-secondary/5 px-4 py-2 text-[11px]">
+        <span class="flex items-center gap-1.5 font-bold text-secondary">
+          <lucide-icon name="contact" class="h-3.5 w-3.5"></lucide-icon> Invocation
+        </span>
+        <span class="text-neutral-600">Persona: <b class="font-mono">{{ inv.personaType }}</b> <span class="font-mono">{{ inv.personaId || '—' }}</span></span>
+        <span *ngIf="inv.requestParams.length" class="text-neutral-600">
+          Params: <span class="font-mono">{{ requestParamsText(inv) }}</span>
+        </span>
+      </div>
       <div class="grid grid-cols-2 gap-4 p-4 lg:grid-cols-3">
         <!-- Snapshot per namespace -->
         <div *ngFor="let entry of objectEntries(tc.snapshot)"

@@ -81,6 +81,18 @@ export interface EvalResult {
 
 // --- Named Test Cases ---
 
+export interface RequestParam {
+  key: string;
+  value: string;
+}
+
+export interface InvocationContext {
+  personaType: 'MID' | 'WID';
+  personaId: string;
+  /** Arbitrary request parameters passed by the calling application */
+  requestParams: RequestParam[];
+}
+
 export interface TestCase {
   id: string;
   name: string;
@@ -90,6 +102,8 @@ export interface TestCase {
   dbKeys: Record<string, string>;
   /** Data snapshot per namespace */
   snapshot: TestDataSnapshot;
+  /** Call context used to invoke the rule (persona + request params) */
+  invocation?: InvocationContext;
   createdAt: string;
   lastRunAt?: string;
   lastResult?: 'PASSED' | 'FAILED';

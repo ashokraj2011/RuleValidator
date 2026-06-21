@@ -11,6 +11,16 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class RuleEngineService {
+  /**
+   * Namespaces whose data is supplied by the calling application at evaluation
+   * time (request/session context) rather than fetched from the database.
+   */
+  static readonly SESSION_NAMESPACES = ['session', 'context', 'request'];
+
+  isSessionNamespace(namespace: string): boolean {
+    return RuleEngineService.SESSION_NAMESPACES.includes(namespace.toLowerCase());
+  }
+
   isLogicalTerm(term: Term): term is LogicalTerm {
     return 'operator' in term && 'terms' in term && !('namespace' in term) && !('rule_ref' in term);
   }

@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ActiveTab, EvalResult, Rule, TestCase, TestCaseRunResult, TestDataSnapshot } from '../models/types';
+import { ActiveTab, EvalResult, InvocationContext, Rule, TestCase, TestCaseRunResult, TestDataSnapshot } from '../models/types';
 import { SAMPLE_RULES } from '../data/sample-rules';
 import { buildSampleData } from '../data/sample-test-cases';
 import { RuleEngineService } from './rule-engine.service';
@@ -13,6 +13,10 @@ function loadFromStorage<T>(key: string, fallback: T): T {
     const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch { return fallback; }
+}
+
+function defaultInvocation(): InvocationContext {
+  return { personaType: 'MID', personaId: '', requestParams: [] };
 }
 
 /** Deterministic JSON with sorted object keys, so value-equal snapshots stringify identically. */
@@ -33,6 +37,7 @@ export class RuleStoreService {
   readonly allRules = signal<Rule[]>(SAMPLE_RULES);
   readonly selectedRuleId = signal<string>(SAMPLE_RULES[0].rule_id);
   readonly testData = signal<TestDataSnapshot>({});
+  readonly invocation = signal<InvocationContext>(defaultInvocation());
   readonly activeTab = signal<ActiveTab>('overview');
   readonly aggregateCoverage = signal(82.4);
   readonly isOptimized = signal(false);
@@ -90,11 +95,13 @@ export class RuleStoreService {
     this.allRules.update((rules) => [...rules, rule]);
     this.selectedRuleId.set(rule.rule_id);
     this.testData.set({});
+    this.invocation.set(defaultInvocation());
   }
 
   selectRule(ruleId: string) {
     this.selectedRuleId.set(ruleId);
     this.testData.set({});
+    this.invocation.set(defaultInvocation());
   }
 
   // --- Test Case CRUD ---

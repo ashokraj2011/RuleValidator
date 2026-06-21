@@ -98,7 +98,92 @@
 
   <div class="mt-4 flex min-h-0 flex-1 gap-5 overflow-hidden">
     <div class="flex-1 space-y-4 overflow-y-auto pr-1">
-      <div *ngFor="let namespace of namespaces()" class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+
+      <!-- Rule invocation context (persona + request params + session data) -->
+      <div class="overflow-hidden rounded-lg border border-secondary/30 bg-secondary/5 shadow-xs">
+        <div class="flex items-center gap-2 border-b border-secondary/20 px-4 py-2.5">
+          <lucide-icon name="contact" class="h-4 w-4 text-secondary"></lucide-icon>
+          <span class="text-xs font-bold text-neutral-800">Rule Invocation Context</span>
+          <span class="text-[10px] text-neutral-500">— details the calling application passes to invoke the rule</span>
+        </div>
+        <div class="space-y-4 p-4">
+          <!-- Persona -->
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">Persona Type</label>
+              <div class="flex overflow-hidden rounded border border-neutral-300 bg-white">
+                <button type="button" (click)="setPersonaType('MID')"
+                  class="flex-1 px-3 py-1.5 text-xs font-bold transition-colors"
+                  [ngClass]="store.invocation().personaType === 'MID' ? 'bg-secondary text-white' : 'text-neutral-600 hover:bg-neutral-50'">MID</button>
+                <button type="button" (click)="setPersonaType('WID')"
+                  class="flex-1 border-l border-neutral-300 px-3 py-1.5 text-xs font-bold transition-colors"
+                  [ngClass]="store.invocation().personaType === 'WID' ? 'bg-secondary text-white' : 'text-neutral-600 hover:bg-neutral-50'">WID</button>
+              </div>
+            </div>
+            <div>
+              <label class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">Persona ID</label>
+              <input type="text" [ngModel]="store.invocation().personaId" (ngModelChange)="setPersonaId($event)"
+                placeholder="e.g. CUST-001"
+                class="w-full rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-secondary focus:ring-1 focus:ring-secondary" />
+            </div>
+          </div>
+
+          <!-- Request params -->
+          <div>
+            <div class="mb-1.5 flex items-center justify-between">
+              <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Request Parameters</label>
+              <button type="button" (click)="addRequestParam()" class="flex items-center gap-1 text-[11px] font-bold text-secondary hover:underline">
+                <lucide-icon name="plus" class="h-3 w-3"></lucide-icon> Add
+              </button>
+            </div>
+            <p *ngIf="store.invocation().requestParams.length === 0" class="rounded border border-dashed border-neutral-200 bg-white px-3 py-1.5 text-[11px] text-neutral-400">
+              Optional key/value parameters supplied with the call.
+            </p>
+            <div *ngFor="let p of store.invocation().requestParams; let i = index" class="mb-1.5 flex items-center gap-2">
+              <input type="text" [ngModel]="p.key" (ngModelChange)="updateRequestParam(i, 'key', $event)"
+                placeholder="key"
+                class="flex-1 rounded border border-neutral-300 bg-white px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-secondary" />
+              <span class="text-neutral-400">=</span>
+              <input type="text" [ngModel]="p.value" (ngModelChange)="updateRequestParam(i, 'value', $event)"
+                placeholder="value"
+                class="flex-1 rounded border border-neutral-300 bg-white px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-secondary" />
+              <button type="button" (click)="removeRequestParam(i)" class="rounded border border-neutral-200 bg-white p-1.5 text-neutral-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600">
+                <lucide-icon name="circle-minus" class="h-3.5 w-3.5"></lucide-icon>
+              </button>
+            </div>
+          </div>
+
+          <!-- Session data (derived from rule definition) -->
+          <div *ngIf="hasSessionData()">
+            <div class="mb-1.5 flex items-center gap-2">
+              <label class="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Session Data</label>
+              <span class="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">supplied by calling app</span>
+              <span class="text-[10px] text-neutral-400">— derived from the rule definition, used in evaluation</span>
+            </div>
+            <div class="space-y-2 rounded border border-neutral-200 bg-white p-3">
+              <div *ngFor="let entry of (sessionNamespaceAttrs() | keyvalue)">
+                <div class="mb-1 flex items-center gap-1.5">
+                  <lucide-icon name="layers" class="h-3 w-3 text-amber-500"></lucide-icon>
+                  <span class="text-[10px] font-bold uppercase tracking-wide text-neutral-600">{{ entry.key }}</span>
+                </div>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div *ngFor="let attr of entry.value" class="flex items-center gap-2">
+                    <label class="w-28 shrink-0 truncate font-mono text-[11px] text-neutral-600" [title]="entry.key + '.' + attr">{{ attr }}</label>
+                    <div class="relative flex-1">
+                      <input type="text" [ngModel]="sessionValue(entry.key, attr)" (ngModelChange)="setSessionValue(entry.key, attr, $event)"
+                        placeholder="value"
+                        class="w-full rounded border border-neutral-300 px-2.5 py-1.5 pr-12 font-mono text-[11px] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-300" />
+                      <span class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold uppercase text-neutral-300">{{ sessionTypeHint(entry.key, attr) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngFor="let namespace of dbNamespaces()" class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
         <div
           class="flex cursor-pointer select-none items-center justify-between border-b border-neutral-300 bg-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-100"
           (click)="toggleNamespace(namespace)"
