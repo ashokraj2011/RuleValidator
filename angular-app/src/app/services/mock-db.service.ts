@@ -1,5 +1,17 @@
 import { Injectable } from '@angular/core';
-import { NamespaceData } from '../models/types';
+import { NamespaceData, TestDataSnapshot } from '../models/types';
+
+export interface LiveParams {
+  personaType: string;
+  personaId: string;
+  extra: { key: string; value: string }[];
+}
+
+export interface LiveFetchResult {
+  snapshot: TestDataSnapshot;
+  /** Which DB record each namespace resolved to (null = no record, synthesized) */
+  matched: Record<string, string | null>;
+}
 
 @Injectable({ providedIn: 'root' })
 export class MockDbService {
@@ -19,6 +31,59 @@ export class MockDbService {
     return JSON.parse(JSON.stringify(record)) as NamespaceData;
   }
 
+  /**
+   * Simulate a live platform call: resolve the persona to a record per required
+   * namespace and overlay caller-supplied parameters, returning the grounded
+   * snapshot the rule engine evaluates. In a real deployment this would call the
+   * platform's data service with personaType/personaId; here it is mocked.
+   */
+  async fetchLiveData(
+    params: LiveParams,
+    namespaceAttrs: Record<string, string[]>,
+  ): Promise<LiveFetchResult> {
+    await new Promise((resolve) => setTimeout(resolve, 400 + Math.random() * 500));
+
+    const snapshot: TestDataSnapshot = {};
+    const matched: Record<string, string | null> = {};
+    const id = params.personaId.trim();
+
+    for (const ns of Object.keys(namespaceAttrs)) {
+      const store = MOCK_DB[ns];
+      const keys = store ? Object.keys(store) : [];
+      let matchKey: string | null = null;
+      if (store && store[id]) {
+        matchKey = id;
+      } else if (keys.length) {
+        // Deterministically resolve an unknown persona id to a stable record.
+        matchKey = keys[hashString(id || params.personaType) % keys.length];
+      }
+      const base: NamespaceData = matchKey ? JSON.parse(JSON.stringify(store[matchKey])) : {};
+      base['persona_type'] = params.personaType;
+      base['persona_id'] = id;
+      snapshot[ns] = base;
+      matched[ns] = matchKey;
+    }
+
+    // Overlay caller parameters. "namespace.attribute" targets one namespace;
+    // a bare "attribute" is applied across every resolved namespace.
+    for (const { key, value } of params.extra) {
+      const k = key.trim();
+      if (!k) continue;
+      const coerced = coerceValue(value);
+      if (k.includes('.')) {
+        const [ns, attr] = k.split('.', 2);
+        snapshot[ns] ??= {};
+        snapshot[ns][attr] = coerced;
+      } else {
+        for (const ns of Object.keys(snapshot)) {
+          snapshot[ns][k] = coerced;
+        }
+      }
+    }
+
+    return { snapshot, matched };
+  }
+
   getAvailableKeys(namespace: string): string[] {
     const namespaceStore = MOCK_DB[namespace];
     return namespaceStore ? Object.keys(namespaceStore) : [];
@@ -27,6 +92,28 @@ export class MockDbService {
   getAvailableNamespaces(): string[] {
     return Object.keys(MOCK_DB);
   }
+}
+
+/** Coerce a string parameter into number / boolean / JSON / string. */
+function coerceValue(raw: string): any {
+  const v = raw.trim();
+  if (v === '') return '';
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  if (v === 'null') return null;
+  if (!Number.isNaN(Number(v)) && /^-?\d*\.?\d+$/.test(v)) return Number(v);
+  if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}'))) {
+    try { return JSON.parse(v); } catch { /* fall through */ }
+  }
+  return raw;
+}
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return h;
 }
 
 const MOCK_DB: Record<string, Record<string, NamespaceData>> = {

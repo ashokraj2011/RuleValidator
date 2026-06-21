@@ -2,8 +2,9 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
-import { TestCase, TestCaseRunResult } from '../../models/types';
+import { EvalResult, TestCase, TestCaseRunResult } from '../../models/types';
 import { MockDbService } from '../../services/mock-db.service';
+import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 
 @Component({
@@ -16,11 +17,29 @@ import { RuleStoreService } from '../../services/rule-store.service';
 export class GeneratedTestsTabComponent {
   readonly store = inject(RuleStoreService);
   private readonly mockDb = inject(MockDbService);
+  private readonly engine = inject(RuleEngineService);
 
   readonly testCases = computed(() => this.store.casesForSelectedRule());
   readonly expandedCaseId = signal<string | null>(null);
   readonly runningCaseId = signal<string | null>(null);
   readonly runningAll = signal(false);
+
+  // --- Live-data test ---
+  readonly showLiveModal = signal(false);
+  readonly livePersonaType = signal<'MID' | 'WID'>('MID');
+  readonly livePersonaId = signal('');
+  readonly liveParams = signal<{ key: string; value: string }[]>([]);
+  readonly liveRunning = signal(false);
+  readonly liveResult = signal<EvalResult | null>(null);
+  readonly liveSnapshot = signal<Record<string, any> | null>(null);
+  readonly liveMatched = signal<Record<string, string | null>>({});
+  readonly liveSaveName = signal('');
+  readonly liveExpected = signal<'PASSED' | 'FAILED' | 'NONE'>('NONE');
+
+  /** Namespaces (+attributes) the selected rule needs from live data. */
+  readonly requiredNamespaces = computed(() =>
+    this.engine.extractNamespaceAttributes(this.store.selectedRule(), this.store.allRules()),
+  );
 
   readonly assertionSummary = computed(() => {
     const cases = this.testCases();
@@ -73,6 +92,116 @@ export class GeneratedTestsTabComponent {
 
   setExpected(tc: TestCase, value: 'PASSED' | 'FAILED' | 'NONE') {
     this.store.setExpectedResult(tc.id, value === 'NONE' ? undefined : value);
+  }
+
+  // --- Live-data test flow ---
+
+  openLive() {
+    this.livePersonaType.set('MID');
+    this.livePersonaId.set('');
+    this.liveParams.set([]);
+    this.liveResult.set(null);
+    this.liveSnapshot.set(null);
+    this.liveMatched.set({});
+    this.liveSaveName.set('');
+    this.liveExpected.set('NONE');
+    this.showLiveModal.set(true);
+  }
+
+  closeLive() { this.showLiveModal.set(false); }
+
+  addLiveParam() {
+    this.liveParams.update((list) => [...list, { key: '', value: '' }]);
+  }
+  removeLiveParam(i: number) {
+    this.liveParams.update((list) => list.filter((_, idx) => idx !== i));
+  }
+  updateLiveParam(i: number, field: 'key' | 'value', val: string) {
+    this.liveParams.update((list) => list.map((p, idx) => (idx === i ? { ...p, [field]: val } : p)));
+  }
+
+  async runLive() {
+    const personaId = this.livePersonaId().trim();
+    if (!personaId) { this.store.showToast('⚠️ Enter a Persona ID to fetch live data.'); return; }
+
+    this.liveRunning.set(true);
+    this.liveResult.set(null);
+    const rule = this.store.selectedRule();
+    const { snapshot, matched } = await this.mockDb.fetchLiveData(
+      { personaType: this.livePersonaType(), personaId, extra: this.liveParams() },
+      this.requiredNamespaces(),
+    );
+    const result = this.engine.evaluateRule(rule, snapshot, this.store.allRules());
+    this.liveSnapshot.set(snapshot);
+    this.liveMatched.set(matched);
+    this.liveResult.set(result);
+    this.liveRunning.set(false);
+    this.store.showToast(`${result.status === 'PASSED' ? '✅' : '❌'} Live evaluation — ${result.status}`);
+  }
+
+  /** Persist the fetched live snapshot as a reproducible, DB-grounded test case. */
+  saveLiveAsCase() {
+    const snapshot = this.liveSnapshot();
+    const result = this.liveResult();
+    if (!snapshot || !result) return;
+    const name = this.liveSaveName().trim()
+      || `Live ${this.livePersonaType()} ${this.livePersonaId().trim()}`;
+
+    const dbKeys: Record<string, string> = {};
+    const matched = this.liveMatched();
+    for (const ns of Object.keys(matched)) {
+      if (matched[ns]) dbKeys[ns] = matched[ns] as string;
+    }
+    const extras = this.liveParams().filter((p) => p.key.trim());
+    const paramNote = extras.length
+      ? ` • params: ${extras.map((p) => `${p.key}=${p.value}`).join(', ')}`
+      : '';
+    const expected = this.liveExpected();
+
+    const tc: TestCase = {
+      id: `tc-${Date.now()}`,
+      name,
+      description: `Captured from live data (${this.livePersonaType()} ${this.livePersonaId().trim()})${paramNote}`,
+      ruleId: this.store.selectedRuleId(),
+      dbKeys,
+      snapshot: JSON.parse(JSON.stringify(snapshot)),
+      createdAt: new Date().toISOString(),
+      lastRunAt: new Date().toISOString(),
+      lastResult: result.status === 'PASSED' ? 'PASSED' : 'FAILED',
+      expectedResult: expected === 'NONE' ? undefined : expected,
+      expectedSnapshot: expected === 'NONE' ? undefined : JSON.parse(JSON.stringify(snapshot)),
+    };
+    this.store.saveTestCase(tc);
+    this.store.addRunResult({
+      id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      testCaseId: tc.id,
+      ruleId: tc.ruleId,
+      runAt: tc.lastRunAt!,
+      evalResult: result,
+      snapshot: tc.snapshot,
+      expectedResult: tc.expectedResult,
+      assertion: !tc.expectedResult ? 'none' : tc.lastResult === tc.expectedResult ? 'match' : 'mismatch',
+      assertionClass: !tc.expectedResult ? 'none' : tc.lastResult === tc.expectedResult ? 'match' : 'bug',
+      dataChanged: false,
+    });
+    this.showLiveModal.set(false);
+    this.store.showToast(`💾 Saved live result as test case "${name}".`);
+  }
+
+  liveLeafSummary(): { passed: number; failed: number; skipped: number } {
+    const result = this.liveResult();
+    if (!result) return { passed: 0, failed: 0, skipped: 0 };
+    const leaves = this.engine.flattenConditions(result);
+    return {
+      passed: leaves.filter((l) => l.status === 'PASSED').length,
+      failed: leaves.filter((l) => l.status === 'FAILED').length,
+      skipped: leaves.filter((l) => l.status === 'SKIPPED' || l.shortCircuited).length,
+    };
+  }
+
+  liveSnapshotEntries(): [string, any][] {
+    const s = this.liveSnapshot();
+    return s ? Object.entries(s) : [];
   }
 
   loadAndEvaluate(tc: TestCase) {
