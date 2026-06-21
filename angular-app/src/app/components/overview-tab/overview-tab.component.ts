@@ -36,6 +36,91 @@ export class OverviewTabComponent {
   readonly searchQuery = signal('');
   readonly healthFilter = signal<'all' | 'healthy' | 'failing' | 'untested'>('all');
   readonly runningAll = signal(false);
+  readonly selectedRuleIds = signal<Set<string>>(new Set());
+
+  /** Rules + test-case counts for the current selection. */
+  readonly selectionStats = computed(() => {
+    const ids = this.selectedRuleIds();
+    const cases = this.store.testCases().filter((tc) => ids.has(tc.ruleId));
+    return { rules: ids.size, cases: cases.length };
+  });
+
+  /** True when every rule in the current filtered view is selected. */
+  readonly allFilteredSelected = computed(() => {
+    const filtered = this.filteredHealth();
+    if (!filtered.length) return false;
+    const ids = this.selectedRuleIds();
+    return filtered.every((h) => ids.has(h.rule.rule_id));
+  });
+
+  isSelected(ruleId: string): boolean {
+    return this.selectedRuleIds().has(ruleId);
+  }
+
+  toggleRule(ruleId: string) {
+    const next = new Set(this.selectedRuleIds());
+    next.has(ruleId) ? next.delete(ruleId) : next.add(ruleId);
+    this.selectedRuleIds.set(next);
+  }
+
+  /** Select / clear every rule currently visible under the search + health filter. */
+  toggleAllFiltered() {
+    const filtered = this.filteredHealth().map((h) => h.rule.rule_id);
+    const next = new Set(this.selectedRuleIds());
+    if (this.allFilteredSelected()) {
+      filtered.forEach((id) => next.delete(id));
+    } else {
+      filtered.forEach((id) => next.add(id));
+    }
+    this.selectedRuleIds.set(next);
+  }
+
+  clearSelection() {
+    this.selectedRuleIds.set(new Set());
+  }
+
+  /** Quick-select rules by classification (replaces the current selection). */
+  selectByClass(kind: 'failing' | 'untested' | 'healthy' | 'bugs' | 'regressions') {
+    const cases = this.store.testCases();
+    const hasBug = (id: string) => cases.some((c) => c.ruleId === id && c.lastAssertionClass === 'bug');
+    const hasReg = (id: string) => cases.some((c) => c.ruleId === id && c.lastAssertion === 'mismatch');
+    const ids = this.ruleHealth()
+      .filter((h) => {
+        switch (kind) {
+          case 'failing': return h.health === 'failing';
+          case 'untested': return h.health === 'untested';
+          case 'healthy': return h.health === 'healthy';
+          case 'bugs': return hasBug(h.rule.rule_id);
+          case 'regressions': return hasReg(h.rule.rule_id);
+        }
+      })
+      .map((h) => h.rule.rule_id);
+    this.selectedRuleIds.set(new Set(ids));
+    if (!ids.length) this.store.showToast('No rules match that classification.');
+  }
+
+  /** Run only the test cases belonging to the selected rules. */
+  async runSelected() {
+    const ids = this.selectedRuleIds();
+    const cases = this.store.testCases().filter((tc) => ids.has(tc.ruleId));
+    if (!cases.length) {
+      this.store.showToast('Select one or more rules that have test cases.');
+      return;
+    }
+    this.runningAll.set(true);
+    await new Promise((r) => setTimeout(r, 200));
+    const runs = this.store.executeTestCases(cases);
+    this.runningAll.set(false);
+    const passed = runs.filter((r) => r.evalResult.status === 'PASSED').length;
+    const bugs = runs.filter((r) => r.assertionClass === 'bug').length;
+    const drift = runs.filter((r) => r.assertionClass === 'drift').length;
+    const tags = [
+      bugs ? `${bugs} possible bug${bugs !== 1 ? 's' : ''} 🐞` : '',
+      drift ? `${drift} data-drift ⚠️` : '',
+    ].filter(Boolean).join(' • ');
+    const tag = tags ? ` • ${tags}` : '';
+    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} across ${ids.size} rule${ids.size !== 1 ? 's' : ''} — ${passed} passed, ${runs.length - passed} failed${tag}`);
+  }
 
   /** Flat list of every test case with its rule + latest assertion state. */
   readonly caseResults = computed(() => {
@@ -56,24 +141,6 @@ export class OverviewTabComponent {
       drift: cases.filter((c) => c.lastAssertionClass === 'drift').length,
     };
   });
-
-  async runAllTests() {
-    const cases = this.store.testCases();
-    if (!cases.length) { this.store.showToast('No test cases to run.'); return; }
-    this.runningAll.set(true);
-    await new Promise((r) => setTimeout(r, 200));
-    const runs = this.store.executeTestCases(cases);
-    this.runningAll.set(false);
-    const passed = runs.filter((r) => r.evalResult.status === 'PASSED').length;
-    const bugs = runs.filter((r) => r.assertionClass === 'bug').length;
-    const drift = runs.filter((r) => r.assertionClass === 'drift').length;
-    const tags = [
-      bugs ? `${bugs} possible bug${bugs !== 1 ? 's' : ''} 🐞` : '',
-      drift ? `${drift} data-drift ⚠️` : '',
-    ].filter(Boolean).join(' • ');
-    const tag = tags ? ` • ${tags}` : '';
-    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} across all rules — ${passed} passed, ${runs.length - passed} failed${tag}`);
-  }
 
   /** Per-rule health derived from rules, saved test cases, and run history. */
   readonly ruleHealth = computed((): RuleHealth[] => {

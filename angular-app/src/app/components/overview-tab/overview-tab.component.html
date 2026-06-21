@@ -7,10 +7,11 @@
       <p class="mt-0.5 text-sm text-neutral-500">Health, coverage and test status across all {{ summary().totalRules }} rules</p>
     </div>
     <div class="flex items-center gap-3">
-      <button type="button" (click)="runAllTests()" [disabled]="runningAll() || summary().totalCases === 0"
-        class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:opacity-90 disabled:opacity-50">
+      <button type="button" (click)="runSelected()" [disabled]="runningAll() || selectionStats().cases === 0"
+        class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        [title]="selectionStats().rules === 0 ? 'Select rules below to run their test cases' : ''">
         <lucide-icon [name]="runningAll() ? 'refresh-cw' : 'circle-play'" class="h-4 w-4" [class.animate-spin]="runningAll()"></lucide-icon>
-        {{ runningAll() ? 'Running…' : 'Run All Tests' }}
+        {{ runningAll() ? 'Running…' : selectionStats().cases ? 'Run selected (' + selectionStats().cases + ')' : 'Run selected' }}
       </button>
       <div class="flex items-center gap-3 rounded-lg border border-neutral-300 bg-white px-5 py-2.5 shadow-xs">
         <div class="flex flex-col">
@@ -105,13 +106,56 @@
     </div>
   </div>
 
+  <!-- Selection / run scope toolbar -->
+  <div class="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-xs lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Run scope</span>
+      <span class="text-xs text-neutral-400">Quick select:</span>
+      <button type="button" (click)="selectByClass('failing')"
+        class="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-100">Failing</button>
+      <button type="button" (click)="selectByClass('bugs')"
+        class="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600 hover:bg-red-100">
+        <lucide-icon name="bug" class="h-3 w-3"></lucide-icon>Has bugs
+      </button>
+      <button type="button" (click)="selectByClass('regressions')"
+        class="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100">Mismatches</button>
+      <button type="button" (click)="selectByClass('untested')"
+        class="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-bold text-neutral-600 hover:bg-neutral-100">Untested</button>
+      <button type="button" (click)="selectByClass('healthy')"
+        class="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[11px] font-bold text-fidelity-green-bright hover:bg-green-100">Healthy</button>
+      <button type="button" (click)="toggleAllFiltered()"
+        class="rounded-full border border-secondary/30 bg-secondary/5 px-2.5 py-1 text-[11px] font-bold text-secondary hover:bg-secondary/10">
+        {{ allFilteredSelected() ? 'Unselect filtered' : 'Select filtered' }}
+      </button>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-xs font-semibold" [ngClass]="selectionStats().rules ? 'text-neutral-700' : 'text-neutral-400'">
+        {{ selectionStats().rules }} rule{{ selectionStats().rules !== 1 ? 's' : '' }} · {{ selectionStats().cases }} test case{{ selectionStats().cases !== 1 ? 's' : '' }} selected
+      </span>
+      <button type="button" (click)="clearSelection()" [disabled]="!selectionStats().rules"
+        class="rounded border border-neutral-200 px-3 py-1.5 text-[11px] font-bold text-neutral-500 hover:bg-neutral-50 disabled:opacity-40">
+        Clear
+      </button>
+      <button type="button" (click)="runSelected()" [disabled]="runningAll() || selectionStats().cases === 0"
+        class="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+        <lucide-icon [name]="runningAll() ? 'refresh-cw' : 'circle-play'" class="h-3.5 w-3.5" [class.animate-spin]="runningAll()"></lucide-icon>
+        Run selected
+      </button>
+    </div>
+  </div>
+
   <!-- Rules health table -->
   <div class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
     <div class="overflow-x-auto">
       <table class="w-full border-collapse text-left text-xs">
         <thead>
           <tr class="border-b border-neutral-200 bg-neutral-50 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-            <th class="p-3 pl-5">Rule</th>
+            <th class="p-3 pl-5 w-8">
+              <input type="checkbox" [checked]="allFilteredSelected()" (change)="toggleAllFiltered()"
+                title="Select all rules in view"
+                class="h-3.5 w-3.5 cursor-pointer accent-primary align-middle" />
+            </th>
+            <th class="p-3">Rule</th>
             <th class="p-3 text-center">Status</th>
             <th class="p-3 text-center">Namespaces</th>
             <th class="p-3 text-center">Conditions</th>
@@ -124,9 +168,15 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-neutral-100">
-          <tr *ngFor="let h of filteredHealth()" class="hover:bg-neutral-50">
-            <!-- Rule name -->
+          <tr *ngFor="let h of filteredHealth()" class="hover:bg-neutral-50"
+            [ngClass]="isSelected(h.rule.rule_id) ? 'bg-secondary/5' : ''">
+            <!-- Selection -->
             <td class="p-3 pl-5">
+              <input type="checkbox" [checked]="isSelected(h.rule.rule_id)" (change)="toggleRule(h.rule.rule_id)"
+                class="h-3.5 w-3.5 cursor-pointer accent-primary align-middle" />
+            </td>
+            <!-- Rule name -->
+            <td class="p-3">
               <button type="button" (click)="openRule(h, 'test-runs')" class="text-left">
                 <div class="font-bold text-neutral-900 hover:text-primary">{{ h.rule.name }}</div>
                 <div class="font-mono text-[10px] text-neutral-400">{{ h.rule.rule_id }}</div>
@@ -190,7 +240,7 @@
 
           <!-- Empty -->
           <tr *ngIf="filteredHealth().length === 0">
-            <td colspan="10" class="p-10 text-center">
+            <td colspan="11" class="p-10 text-center">
               <lucide-icon name="search-x" class="mx-auto mb-2 h-8 w-8 text-neutral-300"></lucide-icon>
               <p class="text-xs font-semibold text-neutral-400">No rules match the current filter</p>
             </td>
