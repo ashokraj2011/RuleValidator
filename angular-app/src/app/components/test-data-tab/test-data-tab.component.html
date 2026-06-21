@@ -96,11 +96,38 @@
     </div>
   </div>
 
-  <div class="mt-4 flex min-h-0 flex-1 gap-5 overflow-hidden">
+  <!-- Sub-section toggle: separate grounded data from rule-call context -->
+  <div class="mt-4 flex shrink-0 items-center gap-2">
+    <div class="flex overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+      <button type="button" (click)="dataView.set('data')"
+        class="flex items-center gap-1.5 px-4 py-2 text-xs font-bold transition-colors"
+        [ngClass]="dataView() === 'data' ? 'bg-primary text-white' : 'text-neutral-600 hover:bg-neutral-50'">
+        <lucide-icon name="database" class="h-3.5 w-3.5"></lucide-icon>
+        Grounded Data
+        <span class="rounded-full px-1.5 py-0.5 text-[9px] font-bold"
+          [ngClass]="dataView() === 'data' ? 'bg-white/25 text-white' : 'bg-neutral-100 text-neutral-500'">{{ dbNamespaces().length }}</span>
+      </button>
+      <button type="button" (click)="dataView.set('invocation')"
+        class="flex items-center gap-1.5 border-l border-neutral-300 px-4 py-2 text-xs font-bold transition-colors"
+        [ngClass]="dataView() === 'invocation' ? 'bg-primary text-white' : 'text-neutral-600 hover:bg-neutral-50'">
+        <lucide-icon name="contact" class="h-3.5 w-3.5"></lucide-icon>
+        Invocation &amp; Session
+        <span *ngIf="hasSessionData()" class="rounded-full px-1.5 py-0.5 text-[9px] font-bold"
+          [ngClass]="dataView() === 'invocation' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-600'">session</span>
+      </button>
+    </div>
+    <p class="text-[11px] text-neutral-400">
+      {{ dataView() === 'data'
+          ? 'The data this rule is evaluated against — fetched from the DB and editable to ground the test.'
+          : 'How the calling application invokes the rule — persona, request params, and session data.' }}
+    </p>
+  </div>
+
+  <div class="mt-3 flex min-h-0 flex-1 gap-5 overflow-hidden">
     <div class="flex-1 space-y-4 overflow-y-auto pr-1">
 
       <!-- Rule invocation context (persona + request params + session data) -->
-      <div class="overflow-hidden rounded-lg border border-secondary/30 bg-secondary/5 shadow-xs">
+      <div *ngIf="dataView() === 'invocation'" class="overflow-hidden rounded-lg border border-secondary/30 bg-secondary/5 shadow-xs">
         <div class="flex items-center gap-2 border-b border-secondary/20 px-4 py-2.5">
           <lucide-icon name="contact" class="h-4 w-4 text-secondary"></lucide-icon>
           <span class="text-xs font-bold text-neutral-800">Rule Invocation Context</span>
@@ -183,6 +210,7 @@
         </div>
       </div>
 
+      <ng-container *ngIf="dataView() === 'data'">
       <div *ngFor="let namespace of dbNamespaces()" class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
         <div
           class="flex cursor-pointer select-none items-center justify-between border-b border-neutral-300 bg-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-100"
@@ -432,7 +460,7 @@
           </div>
 
           <div class="flex items-center gap-2 pt-1">
-            <span class="text-[10px] font-bold uppercase text-neutral-400">Used in rule:</span>
+            <span class="text-[10px] font-bold uppercase text-neutral-400">Covers rule attributes:</span>
             <span
               *ngFor="let attr of attrsFor(namespace)"
               class="rounded border px-2 py-0.5 font-mono text-[10px]"
@@ -443,6 +471,13 @@
           </div>
         </div>
       </div>
+
+      <div *ngIf="dbNamespaces().length === 0" class="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
+        <lucide-icon name="database" class="mx-auto mb-2 h-6 w-6 text-neutral-300"></lucide-icon>
+        <p class="text-xs font-bold text-neutral-600">This rule uses no database namespaces.</p>
+        <p class="mt-1 text-[11px] text-neutral-400">All of its inputs come from the calling application — see the Invocation &amp; Session tab.</p>
+      </div>
+      </ng-container>
     </div>
 
     <aside class="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto xl:flex">
@@ -478,7 +513,7 @@
           <span class="text-xs font-bold uppercase tracking-wide text-neutral-800">Data Readiness</span>
         </div>
         <div class="space-y-2 p-3">
-          <div *ngFor="let namespace of namespaces()" class="flex items-center justify-between text-xs">
+          <div *ngFor="let namespace of dbNamespaces()" class="flex items-center justify-between text-xs">
             <span class="font-mono font-bold text-neutral-700">{{ namespace }}</span>
             <span *ngIf="hasData(namespace)" class="flex items-center gap-1 font-bold text-fidelity-green-bright">
               <lucide-icon name="circle-check" class="h-3.5 w-3.5"></lucide-icon>
@@ -487,6 +522,13 @@
             <span *ngIf="!hasData(namespace)" class="flex items-center gap-1 font-bold text-amber-600">
               <lucide-icon name="triangle-alert" class="h-3.5 w-3.5"></lucide-icon>
               Needs data
+            </span>
+          </div>
+          <div *ngIf="hasSessionData()" class="flex items-center justify-between text-xs">
+            <span class="font-mono font-bold text-neutral-700">session</span>
+            <span class="flex items-center gap-1 font-bold text-amber-600">
+              <lucide-icon name="contact" class="h-3.5 w-3.5"></lucide-icon>
+              From caller
             </span>
           </div>
           <div class="mt-2 border-t border-neutral-200 pt-2">

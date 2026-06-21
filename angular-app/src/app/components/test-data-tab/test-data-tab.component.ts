@@ -43,6 +43,9 @@ export class TestDataTabComponent {
   });
   readonly hasSessionData = computed(() => Object.keys(this.sessionNamespaceAttrs()).length > 0);
 
+  /** Sub-section of the Test Data tab: 'data' (grounded DB data) or 'invocation' (rule-call context). */
+  readonly dataView = signal<'data' | 'invocation'>('data');
+
   /** Session field values keyed by "namespace.attribute". */
   readonly sessionValues = signal<Record<string, string>>({});
 
