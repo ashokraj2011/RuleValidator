@@ -95,8 +95,18 @@ export interface TestCase {
   lastResult?: 'PASSED' | 'FAILED';
   /** Asserted expected outcome; undefined = no assertion */
   expectedResult?: 'PASSED' | 'FAILED';
+  /** Data snapshot the expectation was pinned against (for drift detection) */
+  expectedSnapshot?: TestDataSnapshot;
   /** Result of the latest assertion check */
   lastAssertion?: 'match' | 'mismatch' | 'none';
+  /**
+   * Refined latest assertion classification:
+   * - 'match'  actual outcome equals the expected outcome
+   * - 'bug'    mismatch on UNCHANGED data → likely rule/engine bug
+   * - 'drift'  mismatch but the data changed since the expectation was pinned
+   * - 'none'   no expectation set
+   */
+  lastAssertionClass?: 'match' | 'bug' | 'drift' | 'none';
 }
 
 export interface TestCaseRunResult {
@@ -110,6 +120,10 @@ export interface TestCaseRunResult {
   expectedResult?: 'PASSED' | 'FAILED';
   /** Whether actual matched the expected outcome */
   assertion?: 'match' | 'mismatch' | 'none';
+  /** Refined classification of a mismatch (bug vs data drift) */
+  assertionClass?: 'match' | 'bug' | 'drift' | 'none';
+  /** True when the run data differs from the data the expectation was pinned against */
+  dataChanged?: boolean;
 }
 
 export interface ConditionStats {

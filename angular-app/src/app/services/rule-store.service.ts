@@ -15,6 +15,19 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   } catch { return fallback; }
 }
 
+/** Deterministic JSON with sorted object keys, so value-equal snapshots stringify identically. */
+function stableStringify(value: any): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+}
+
+/** Value equality for two test-data snapshots, independent of key ordering. */
+function snapshotsEqual(a: TestDataSnapshot, b: TestDataSnapshot): boolean {
+  return stableStringify(a) === stableStringify(b);
+}
+
 @Injectable({ providedIn: 'root' })
 export class RuleStoreService {
   readonly allRules = signal<Rule[]>(SAMPLE_RULES);
@@ -38,7 +51,7 @@ export class RuleStoreService {
 
   /** Populate demo test cases + run history the first time the app is opened. */
   private seedSampleDataIfEmpty() {
-    const SEED_VERSION = '2';
+    const SEED_VERSION = '3';
     const storedVersion = localStorage.getItem(LS_SEED_KEY);
     const cases = this.testCases();
     const isEmpty = cases.length === 0 && this.runHistory().length === 0;
@@ -123,6 +136,7 @@ export class RuleStoreService {
               lastRunAt: result.runAt,
               lastResult: result.evalResult.status as 'PASSED' | 'FAILED',
               lastAssertion: result.assertion ?? 'none',
+              lastAssertionClass: result.assertionClass ?? 'none',
             }
           : tc
       );
@@ -134,7 +148,17 @@ export class RuleStoreService {
   /** Set (or clear) the expected outcome assertion for a test case. */
   setExpectedResult(id: string, expected: 'PASSED' | 'FAILED' | undefined) {
     this.testCases.update(list => {
-      const next = list.map(tc => (tc.id === id ? { ...tc, expectedResult: expected } : tc));
+      const next = list.map(tc =>
+        tc.id === id
+          ? {
+              ...tc,
+              expectedResult: expected,
+              // Pin the data the expectation is based on so we can later tell a
+              // genuine rule bug (same data, different result) from data drift.
+              expectedSnapshot: expected ? structuredClone(tc.snapshot) : undefined,
+            }
+          : tc,
+      );
       localStorage.setItem(LS_CASES_KEY, JSON.stringify(next));
       return next;
     });
@@ -150,6 +174,13 @@ export class RuleStoreService {
     const expected = tc.expectedResult;
     const assertion: 'match' | 'mismatch' | 'none' = !expected ? 'none' : status === expected ? 'match' : 'mismatch';
 
+    // Did the data change since the expectation was pinned? If no baseline was
+    // captured, fall back to the case's own snapshot (i.e. treat as unchanged).
+    const baseline = tc.expectedSnapshot ?? tc.snapshot;
+    const dataChanged = !!expected && !snapshotsEqual(tc.snapshot, baseline);
+    const assertionClass: 'match' | 'bug' | 'drift' | 'none' =
+      assertion === 'none' ? 'none' : assertion === 'match' ? 'match' : dataChanged ? 'drift' : 'bug';
+
     const run: TestCaseRunResult = {
       id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       testCaseId: tc.id,
@@ -159,6 +190,8 @@ export class RuleStoreService {
       snapshot: tc.snapshot,
       expectedResult: expected,
       assertion,
+      assertionClass,
+      dataChanged,
     };
     this.addRunResult(run);
     return run;

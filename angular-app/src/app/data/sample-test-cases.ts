@@ -148,11 +148,15 @@ export function buildSampleData(
     let lastRunAt: string | undefined;
     let lastResult: 'PASSED' | 'FAILED' | undefined;
     let lastAssertion: 'match' | 'mismatch' | 'none' = 'none';
+    let lastAssertionClass: 'match' | 'bug' | 'drift' | 'none' = 'none';
 
     for (let i = 0; i < numRuns; i++) {
       const evalResult = engine.evaluateRule(rule, seed.snapshot, rules);
       const status = evalResult.status === 'PASSED' ? 'PASSED' : 'FAILED';
       const assertion: 'match' | 'mismatch' | 'none' = !seed.expected ? 'none' : status === seed.expected ? 'match' : 'mismatch';
+      // Seed data never changes, so any mismatch is a same-data contradiction → a likely rule bug.
+      const assertionClass: 'match' | 'bug' | 'drift' | 'none' =
+        assertion === 'none' ? 'none' : assertion === 'match' ? 'match' : 'bug';
       // space runs out over the last few days, newest last
       const runAt = new Date(
         now - (numRuns - 1 - i) * (DAY / 2) - caseIdx * 60 * 60 * 1000,
@@ -166,10 +170,13 @@ export function buildSampleData(
         snapshot: seed.snapshot,
         expectedResult: seed.expected,
         assertion,
+        assertionClass,
+        dataChanged: false,
       });
       lastRunAt = runAt;
       lastResult = status;
       lastAssertion = assertion;
+      lastAssertionClass = assertionClass;
     }
 
     testCases.push({
@@ -183,7 +190,9 @@ export function buildSampleData(
       lastRunAt,
       lastResult,
       expectedResult: seed.expected,
+      expectedSnapshot: seed.expected ? seed.snapshot : undefined,
       lastAssertion,
+      lastAssertionClass,
     });
   });
 

@@ -209,8 +209,11 @@
         <span class="flex items-center gap-1 text-fidelity-green-bright">
           <lucide-icon name="circle-check" class="h-3 w-3"></lucide-icon>{{ assertionSummary().matches }} meeting expected
         </span>
-        <span class="flex items-center gap-1" [ngClass]="assertionSummary().regressions ? 'text-red-600' : 'text-neutral-400'">
-          <lucide-icon name="triangle-alert" class="h-3 w-3"></lucide-icon>{{ assertionSummary().regressions }} regression{{ assertionSummary().regressions !== 1 ? 's' : '' }}
+        <span class="flex items-center gap-1" [ngClass]="assertionSummary().bugs ? 'text-red-600' : 'text-neutral-400'">
+          <lucide-icon name="bug" class="h-3 w-3"></lucide-icon>{{ assertionSummary().bugs }} possible bug{{ assertionSummary().bugs !== 1 ? 's' : '' }}
+        </span>
+        <span class="flex items-center gap-1" [ngClass]="assertionSummary().drift ? 'text-amber-600' : 'text-neutral-400'">
+          <lucide-icon name="triangle-alert" class="h-3 w-3"></lucide-icon>{{ assertionSummary().drift }} data-drift
         </span>
       </div>
     </div>
@@ -229,7 +232,7 @@
         </thead>
         <tbody class="divide-y divide-neutral-100">
           <tr *ngFor="let c of caseResults()" class="hover:bg-neutral-50"
-            [ngClass]="c.tc.lastAssertion === 'mismatch' ? 'bg-red-50/40' : ''">
+            [ngClass]="c.tc.lastAssertionClass === 'bug' ? 'bg-red-50/40' : c.tc.lastAssertionClass === 'drift' ? 'bg-amber-50/40' : ''">
             <td class="px-5 py-2 font-semibold text-neutral-800">{{ c.tc.name }}</td>
             <td class="px-3 py-2 text-neutral-500">{{ c.ruleName }}</td>
             <td class="px-3 py-2 text-center">
@@ -247,8 +250,13 @@
               <span *ngIf="!c.tc.lastResult" class="text-neutral-300">not run</span>
             </td>
             <td class="px-3 py-2 text-center">
-              <span *ngIf="c.tc.lastAssertion === 'mismatch'" class="inline-flex items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white">
-                <lucide-icon name="triangle-alert" class="h-3 w-3"></lucide-icon>Regression
+              <span *ngIf="c.tc.lastAssertionClass === 'bug'" class="inline-flex items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white"
+                title="Outcome differs from expected on UNCHANGED data — likely a rule/engine bug.">
+                <lucide-icon name="bug" class="h-3 w-3"></lucide-icon>Possible bug
+              </span>
+              <span *ngIf="c.tc.lastAssertionClass === 'drift'" class="inline-flex items-center gap-1 rounded bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white"
+                title="Outcome differs from expected, but the data changed since the expectation was pinned.">
+                <lucide-icon name="triangle-alert" class="h-3 w-3"></lucide-icon>Data drift
               </span>
               <span *ngIf="c.tc.lastAssertion === 'match'" class="inline-flex items-center gap-1 text-fidelity-green-bright">
                 <lucide-icon name="circle-check" class="h-3.5 w-3.5"></lucide-icon>

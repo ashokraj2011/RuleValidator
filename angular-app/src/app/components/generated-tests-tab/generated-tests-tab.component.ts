@@ -30,6 +30,8 @@ export class GeneratedTestsTabComponent {
       asserted: asserted.length,
       regressions: cases.filter(c => c.lastAssertion === 'mismatch').length,
       matches: cases.filter(c => c.lastAssertion === 'match').length,
+      bugs: cases.filter(c => c.lastAssertionClass === 'bug').length,
+      drift: cases.filter(c => c.lastAssertionClass === 'drift').length,
     };
   });
 
@@ -44,7 +46,10 @@ export class GeneratedTestsTabComponent {
     await new Promise(r => setTimeout(r, 120));
     const run = this.store.executeTestCase(tc);
     this.runningCaseId.set(null);
-    const tag = run.assertion === 'mismatch' ? ' ⚠️ REGRESSION' : run.assertion === 'match' ? ' ✓ matches expected' : '';
+    const tag =
+      run.assertionClass === 'bug' ? ' 🐞 POSSIBLE RULE BUG (data unchanged)'
+      : run.assertionClass === 'drift' ? ' ⚠️ mismatch (data changed)'
+      : run.assertion === 'match' ? ' ✓ matches expected' : '';
     this.store.showToast(`${run.evalResult.status === 'PASSED' ? '✅' : '❌'} "${tc.name}" — ${run.evalResult.status}${tag}`);
   }
 
@@ -56,9 +61,14 @@ export class GeneratedTestsTabComponent {
     const runs = this.store.executeTestCases(cases);
     this.runningAll.set(false);
     const passed = runs.filter(r => r.evalResult.status === 'PASSED').length;
-    const regressions = runs.filter(r => r.assertion === 'mismatch').length;
-    const regTag = regressions ? ` • ${regressions} regression${regressions !== 1 ? 's' : ''} ⚠️` : '';
-    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} — ${passed} passed, ${runs.length - passed} failed${regTag}`);
+    const bugs = runs.filter(r => r.assertionClass === 'bug').length;
+    const drift = runs.filter(r => r.assertionClass === 'drift').length;
+    const tags = [
+      bugs ? `${bugs} possible bug${bugs !== 1 ? 's' : ''} 🐞` : '',
+      drift ? `${drift} data-drift ⚠️` : '',
+    ].filter(Boolean).join(' • ');
+    const tag = tags ? ` • ${tags}` : '';
+    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} — ${passed} passed, ${runs.length - passed} failed${tag}`);
   }
 
   setExpected(tc: TestCase, value: 'PASSED' | 'FAILED' | 'NONE') {

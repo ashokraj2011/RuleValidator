@@ -492,15 +492,19 @@ export class TestDataTabComponent {
     }
 
     const expected = this.saveExpected();
+    const snapshotCopy = JSON.parse(JSON.stringify(snapshot));
     const tc: TestCase = {
       id: `tc-${Date.now()}`,
       name,
       description: this.saveDescription().trim(),
       ruleId: this.store.selectedRuleId(),
       dbKeys,
-      snapshot: JSON.parse(JSON.stringify(snapshot)),
+      snapshot: snapshotCopy,
       createdAt: new Date().toISOString(),
       expectedResult: expected === 'NONE' ? undefined : expected,
+      // Pin the data the expectation is based on so later runs can tell a real
+      // rule bug (same data, different result) from data drift.
+      expectedSnapshot: expected === 'NONE' ? undefined : JSON.parse(JSON.stringify(snapshot)),
     };
     this.store.saveTestCase(tc);
     this.showSaveModal.set(false);

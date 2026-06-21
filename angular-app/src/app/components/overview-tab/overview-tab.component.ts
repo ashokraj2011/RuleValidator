@@ -52,6 +52,8 @@ export class OverviewTabComponent {
       asserted: cases.filter((c) => c.expectedResult).length,
       matches: cases.filter((c) => c.lastAssertion === 'match').length,
       regressions: cases.filter((c) => c.lastAssertion === 'mismatch').length,
+      bugs: cases.filter((c) => c.lastAssertionClass === 'bug').length,
+      drift: cases.filter((c) => c.lastAssertionClass === 'drift').length,
     };
   });
 
@@ -63,9 +65,14 @@ export class OverviewTabComponent {
     const runs = this.store.executeTestCases(cases);
     this.runningAll.set(false);
     const passed = runs.filter((r) => r.evalResult.status === 'PASSED').length;
-    const regressions = runs.filter((r) => r.assertion === 'mismatch').length;
-    const regTag = regressions ? ` • ${regressions} regression${regressions !== 1 ? 's' : ''} ⚠️` : '';
-    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} across all rules — ${passed} passed, ${runs.length - passed} failed${regTag}`);
+    const bugs = runs.filter((r) => r.assertionClass === 'bug').length;
+    const drift = runs.filter((r) => r.assertionClass === 'drift').length;
+    const tags = [
+      bugs ? `${bugs} possible bug${bugs !== 1 ? 's' : ''} 🐞` : '',
+      drift ? `${drift} data-drift ⚠️` : '',
+    ].filter(Boolean).join(' • ');
+    const tag = tags ? ` • ${tags}` : '';
+    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} across all rules — ${passed} passed, ${runs.length - passed} failed${tag}`);
   }
 
   /** Per-rule health derived from rules, saved test cases, and run history. */

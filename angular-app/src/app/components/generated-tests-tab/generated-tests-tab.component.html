@@ -7,7 +7,7 @@
         Saved test cases for <span class="font-bold text-secondary">{{ store.selectedRule().name }}</span>
         — {{ testCases().length }} case{{ testCases().length !== 1 ? 's' : '' }}
         <span *ngIf="assertionSummary().asserted" class="ml-1">
-          • {{ assertionSummary().asserted }} asserted<span *ngIf="assertionSummary().regressions" class="font-bold text-red-600"> • {{ assertionSummary().regressions }} regression{{ assertionSummary().regressions !== 1 ? 's' : '' }}</span>
+          • {{ assertionSummary().asserted }} asserted<span *ngIf="assertionSummary().bugs" class="font-bold text-red-600"> • {{ assertionSummary().bugs }} possible bug{{ assertionSummary().bugs !== 1 ? 's' : '' }} 🐞</span><span *ngIf="assertionSummary().drift" class="font-bold text-amber-600"> • {{ assertionSummary().drift }} data-drift</span>
         </span>
       </p>
     </div>
@@ -61,9 +61,15 @@
             NOT RUN
           </span>
           <!-- Assertion badge -->
-          <span *ngIf="tc.lastAssertion === 'mismatch'" class="flex items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white">
+          <span *ngIf="tc.lastAssertionClass === 'bug'" class="flex items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white"
+            title="Actual outcome differs from the expected outcome even though the test data has not changed — likely a rule/engine bug.">
+            <lucide-icon name="bug" class="h-3 w-3"></lucide-icon>
+            Possible rule bug
+          </span>
+          <span *ngIf="tc.lastAssertionClass === 'drift'" class="flex items-center gap-1 rounded bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase text-white"
+            title="Outcome differs from expected, but the test data changed since the expectation was pinned — re-confirm the expected result.">
             <lucide-icon name="triangle-alert" class="h-3 w-3"></lucide-icon>
-            Regression
+            Data drift
           </span>
           <span *ngIf="tc.lastAssertion === 'match'" class="flex items-center gap-1 rounded bg-green-50 px-2 py-0.5 text-[9px] font-bold uppercase text-fidelity-green-bright">
             <lucide-icon name="circle-check" class="h-3 w-3"></lucide-icon>
