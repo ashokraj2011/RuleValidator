@@ -58,6 +58,12 @@ export class GeneratedTestsTabComponent {
     this.expandedCaseId.update(cur => cur === id ? null : id);
   }
   isExpanded(id: string): boolean { return this.expandedCaseId() === id; }
+
+  /** Auto-generate the system PASS/FAIL pair for the selected rule. */
+  autoGenerate() {
+    const n = this.store.regenerateSystemCases(this.store.selectedRuleId());
+    this.store.showToast(n ? `🤖 Generated ${n} system test cases (1 PASS, 1 FAIL).` : '⚠️ Could not generate cases.');
+  }
   runsFor(id: string): TestCaseRunResult[] { return this.store.runsForTestCase(id); }
 
   async runTestCase(tc: TestCase) {

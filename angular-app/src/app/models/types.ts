@@ -98,6 +98,8 @@ export interface TestCase {
   name: string;
   description: string;
   ruleId: string;
+  /** Origin of the case: 'system' = auto-generated PASS/FAIL pair, 'user' = hand-authored */
+  source?: 'system' | 'user';
   /** DB keys per namespace */
   dbKeys: Record<string, string>;
   /** Data snapshot per namespace */

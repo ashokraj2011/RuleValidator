@@ -253,6 +253,101 @@ export class RuleEngineService {
     if (!result.children?.length) return [result];
     return result.children.flatMap((child) => this.flattenConditions(child));
   }
+
+  /**
+   * Synthesize a data snapshot that makes the rule evaluate to `target`
+   * (true = PASS, false = FAIL). Walks the term tree assigning satisfying or
+   * violating values per leaf comparison, following AND/OR/NOT semantics and
+   * descending into chained rules. Session/context namespaces are populated the
+   * same way — the calling application/engine supplies them at evaluation time.
+   */
+  synthesizeSnapshot(rule: Rule, target: boolean, allRules?: Rule[]): TestDataSnapshot {
+    const snapshot: TestDataSnapshot = {};
+    const setVal = (ns: string, attr: string, val: any) => {
+      snapshot[ns] ??= {};
+      if (val === undefined) delete snapshot[ns][attr];
+      else snapshot[ns][attr] = val;
+    };
+
+    const walk = (term: Term, want: boolean): void => {
+      if (this.isComparisonTerm(term)) {
+        const val = want
+          ? this.satisfyValue(term.operator, term.value)
+          : this.violateValue(term.operator, term.value);
+        setVal(term.namespace, term.attribute, val);
+        return;
+      }
+      if (this.isLogicalTerm(term)) {
+        if (term.operator === 'AND') {
+          // true → all children true; false → make the first child false, rest true
+          want ? term.terms.forEach((t) => walk(t, true)) : term.terms.forEach((t, i) => walk(t, i !== 0));
+        } else if (term.operator === 'OR') {
+          // true → one child true is enough (avoid conflicting siblings); false → all false
+          if (want) { if (term.terms.length) walk(term.terms[0], true); }
+          else term.terms.forEach((t) => walk(t, false));
+        } else if (term.terms.length) {
+          walk(term.terms[0], !want);
+        }
+        return;
+      }
+      if (this.isRuleRefTerm(term) && allRules) {
+        const ref = allRules.find((r) => r.rule_id === term.rule_ref);
+        if (ref) walk(ref.terms, want);
+      }
+    };
+
+    walk(rule.terms, target);
+    return snapshot;
+  }
+
+  private differ(value: any): any {
+    if (typeof value === 'number') return value + 1;
+    if (typeof value === 'boolean') return !value;
+    if (typeof value === 'string') return `${value}_X`;
+    return 'OTHER';
+  }
+
+  private notInArray(arr: any): any {
+    if (!Array.isArray(arr) || !arr.length) return 'NONE';
+    if (arr.every((v) => typeof v === 'number')) return Math.max(...arr) + 1;
+    return `${String(arr[0])}_X`;
+  }
+
+  private satisfyValue(op: string, value: any): any {
+    switch (op) {
+      case 'equal_to': return value;
+      case 'not_equal_to': return this.differ(value);
+      case 'greater_than': return typeof value === 'number' ? value + 1 : value;
+      case 'greater_than_equal': return value;
+      case 'less_than': return typeof value === 'number' ? value - 1 : value;
+      case 'less_than_equal': return value;
+      case 'contains': return [value];
+      case 'not_contains': return [];
+      case 'in': return Array.isArray(value) ? value[0] : value;
+      case 'not_in': return this.notInArray(value);
+      case 'exists': return 'present';
+      case 'not_exists': return undefined;
+      default: return value;
+    }
+  }
+
+  private violateValue(op: string, value: any): any {
+    switch (op) {
+      case 'equal_to': return this.differ(value);
+      case 'not_equal_to': return value;
+      case 'greater_than': return typeof value === 'number' ? value : this.differ(value);
+      case 'greater_than_equal': return typeof value === 'number' ? value - 1 : this.differ(value);
+      case 'less_than': return value;
+      case 'less_than_equal': return typeof value === 'number' ? value + 1 : this.differ(value);
+      case 'contains': return [];
+      case 'not_contains': return [value];
+      case 'in': return this.notInArray(value);
+      case 'not_in': return Array.isArray(value) ? value[0] : value;
+      case 'exists': return undefined;
+      case 'not_exists': return 'present';
+      default: return this.differ(value);
+    }
+  }
 }
 
 const OPERATOR_DISPLAY: Record<string, string> = {

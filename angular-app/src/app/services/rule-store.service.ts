@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ActiveTab, EvalResult, InvocationContext, Rule, TestCase, TestCaseRunResult, TestDataSnapshot } from '../models/types';
 import { SAMPLE_RULES } from '../data/sample-rules';
-import { buildSampleData } from '../data/sample-test-cases';
+import { buildSampleData, generateSystemCases } from '../data/sample-test-cases';
 import { RuleEngineService } from './rule-engine.service';
 
 const LS_CASES_KEY = 'ruleValidator_testCases';
@@ -56,11 +56,11 @@ export class RuleStoreService {
 
   /** Populate demo test cases + run history the first time the app is opened. */
   private seedSampleDataIfEmpty() {
-    const SEED_VERSION = '3';
+    const SEED_VERSION = '4';
     const storedVersion = localStorage.getItem(LS_SEED_KEY);
     const cases = this.testCases();
     const isEmpty = cases.length === 0 && this.runHistory().length === 0;
-    const isPureSeed = cases.length > 0 && cases.every((c) => c.id.startsWith('tc_seed_'));
+    const isPureSeed = cases.length > 0 && cases.every((c) => c.id.startsWith('tc_seed_') || c.id.startsWith('tc_sys_'));
 
     // Seed when empty, or upgrade untouched demo data to the latest seed version.
     if (!isEmpty && !(storedVersion !== SEED_VERSION && isPureSeed)) {
@@ -126,6 +126,30 @@ export class RuleStoreService {
       localStorage.setItem(LS_RUNS_KEY, JSON.stringify(next));
       return next;
     });
+  }
+
+  /**
+   * Auto-generate (or refresh) the system PASS/FAIL test-case pair for a rule.
+   * Replaces any existing system cases + their runs for that rule.
+   */
+  regenerateSystemCases(ruleId: string): number {
+    const rule = this.allRules().find((r) => r.rule_id === ruleId);
+    if (!rule) return 0;
+    const { cases, runs } = generateSystemCases(this.engine, rule, this.allRules());
+
+    this.testCases.update((list) => {
+      const kept = list.filter((c) => !(c.ruleId === ruleId && c.source === 'system'));
+      const next = [...kept, ...cases];
+      localStorage.setItem(LS_CASES_KEY, JSON.stringify(next));
+      return next;
+    });
+    this.runHistory.update((list) => {
+      const kept = list.filter((r) => !(r.ruleId === ruleId && r.testCaseId.startsWith('tc_sys_')));
+      const next = [...kept, ...runs];
+      localStorage.setItem(LS_RUNS_KEY, JSON.stringify(next));
+      return next;
+    });
+    return cases.length;
   }
 
   addRunResult(result: TestCaseRunResult) {

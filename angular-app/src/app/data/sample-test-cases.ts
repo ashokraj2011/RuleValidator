@@ -130,6 +130,74 @@ const SEED_CASES: SeedCase[] = [
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Auto-generate a PASS and a FAIL test case for a rule by synthesizing data
+ * that drives the rule TRUE and FALSE. Session/other inputs are synthesized
+ * too — the engine supplies them at call time. Returns the two cases plus a
+ * verifying run for each.
+ */
+export function generateSystemCases(
+  engine: RuleEngineService,
+  rule: Rule,
+  allRules: Rule[],
+  now = Date.now(),
+): { cases: TestCase[]; runs: TestCaseRunResult[] } {
+  const cases: TestCase[] = [];
+  const runs: TestCaseRunResult[] = [];
+  const specs: { target: boolean; expected: 'PASSED' | 'FAILED' }[] = [
+    { target: true, expected: 'PASSED' },
+    { target: false, expected: 'FAILED' },
+  ];
+
+  specs.forEach((spec, i) => {
+    const snapshot = engine.synthesizeSnapshot(rule, spec.target, allRules);
+    const evalResult = engine.evaluateRule(rule, snapshot, allRules);
+    const status: 'PASSED' | 'FAILED' = evalResult.status === 'PASSED' ? 'PASSED' : 'FAILED';
+    const assertion: 'match' | 'mismatch' = status === spec.expected ? 'match' : 'mismatch';
+    const assertionClass: 'match' | 'bug' = assertion === 'match' ? 'match' : 'bug';
+    const id = `tc_sys_${rule.rule_id}_${spec.expected.toLowerCase()}`;
+    const runAt = new Date(now - i * 1000).toISOString();
+
+    const dbKeys: Record<string, string> = {};
+    for (const ns of engine.extractNamespaces(rule, allRules)) {
+      if (!engine.isSessionNamespace(ns)) dbKeys[ns] = `AUTO-${ns.toUpperCase()}`;
+    }
+
+    cases.push({
+      id,
+      name: `[auto] ${rule.name} — expect ${spec.expected}`,
+      description: `System-generated ${spec.expected === 'PASSED' ? 'positive' : 'negative'} case. Data was synthesized to make the rule evaluate ${spec.target ? 'TRUE' : 'FALSE'}; the engine supplies session and other call details at evaluation time.`,
+      ruleId: rule.rule_id,
+      source: 'system',
+      dbKeys,
+      snapshot,
+      invocation: { personaType: 'MID', personaId: `AUTO-${spec.expected}`, requestParams: [] },
+      createdAt: new Date(now).toISOString(),
+      lastRunAt: runAt,
+      lastResult: status,
+      expectedResult: spec.expected,
+      expectedSnapshot: snapshot,
+      lastAssertion: assertion,
+      lastAssertionClass: assertionClass,
+    });
+
+    runs.push({
+      id: `run_sys_${rule.rule_id}_${i}`,
+      testCaseId: id,
+      ruleId: rule.rule_id,
+      runAt,
+      evalResult,
+      snapshot,
+      expectedResult: spec.expected,
+      assertion,
+      assertionClass,
+      dataChanged: false,
+    });
+  });
+
+  return { cases, runs };
+}
+
 export function buildSampleData(
   engine: RuleEngineService,
   rules: Rule[],
@@ -184,6 +252,7 @@ export function buildSampleData(
       name: seed.name,
       description: seed.description,
       ruleId: seed.ruleId,
+      source: 'user',
       dbKeys: seed.dbKeys,
       snapshot: seed.snapshot,
       createdAt,
@@ -194,6 +263,13 @@ export function buildSampleData(
       lastAssertion,
       lastAssertionClass,
     });
+  });
+
+  // Auto-generate a PASS + FAIL case for every rule (system-generated baseline).
+  rules.forEach((rule) => {
+    const { cases, runs } = generateSystemCases(engine, rule, rules, now);
+    testCases.push(...cases);
+    runHistory.push(...runs);
   });
 
   return { testCases, runHistory };
