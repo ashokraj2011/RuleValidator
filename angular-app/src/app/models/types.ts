@@ -93,6 +93,10 @@ export interface TestCase {
   createdAt: string;
   lastRunAt?: string;
   lastResult?: 'PASSED' | 'FAILED';
+  /** Asserted expected outcome; undefined = no assertion */
+  expectedResult?: 'PASSED' | 'FAILED';
+  /** Result of the latest assertion check */
+  lastAssertion?: 'match' | 'mismatch' | 'none';
 }
 
 export interface TestCaseRunResult {
@@ -102,6 +106,10 @@ export interface TestCaseRunResult {
   runAt: string;
   evalResult: EvalResult;
   snapshot: TestDataSnapshot;
+  /** Expected outcome asserted at run time (if any) */
+  expectedResult?: 'PASSED' | 'FAILED';
+  /** Whether actual matched the expected outcome */
+  assertion?: 'match' | 'mismatch' | 'none';
 }
 
 export interface ConditionStats {

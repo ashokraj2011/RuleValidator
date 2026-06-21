@@ -67,6 +67,27 @@
             rows="3"
             class="w-full resize-none rounded border border-neutral-300 px-3 py-2 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"></textarea>
         </div>
+        <div>
+          <label class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">Expected Result (assertion)</label>
+          <div class="flex overflow-hidden rounded border border-neutral-300">
+            <button type="button" (click)="saveExpected.set('NONE')"
+              class="flex-1 px-3 py-2 text-xs font-bold transition-colors"
+              [ngClass]="saveExpected() === 'NONE' ? 'bg-neutral-700 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50'">
+              No assertion
+            </button>
+            <button type="button" (click)="saveExpected.set('PASSED')"
+              class="flex-1 border-l border-neutral-300 px-3 py-2 text-xs font-bold transition-colors"
+              [ngClass]="saveExpected() === 'PASSED' ? 'bg-green-600 text-white' : 'bg-white text-green-700 hover:bg-green-50'">
+              Expect PASS
+            </button>
+            <button type="button" (click)="saveExpected.set('FAILED')"
+              class="flex-1 border-l border-neutral-300 px-3 py-2 text-xs font-bold transition-colors"
+              [ngClass]="saveExpected() === 'FAILED' ? 'bg-red-600 text-white' : 'bg-white text-red-700 hover:bg-red-50'">
+              Expect FAIL
+            </button>
+          </div>
+          <p class="mt-1 text-[10px] text-neutral-400">When set, a run is flagged as a regression if the actual result differs.</p>
+        </div>
         <div class="flex justify-end gap-2 pt-1">
           <button type="button" (click)="showSaveModal.set(false)" class="rounded border border-neutral-300 px-4 py-2 text-xs font-bold text-neutral-600 hover:bg-neutral-50">Cancel</button>
           <button type="button" (click)="confirmSave()" class="rounded bg-secondary px-4 py-2 text-xs font-bold text-white hover:opacity-90">Save Test Case</button>

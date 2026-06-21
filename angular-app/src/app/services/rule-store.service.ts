@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ActiveTab, Rule, TestCase, TestCaseRunResult, TestDataSnapshot } from '../models/types';
+import { ActiveTab, EvalResult, Rule, TestCase, TestCaseRunResult, TestDataSnapshot } from '../models/types';
 import { SAMPLE_RULES } from '../data/sample-rules';
 import { buildSampleData } from '../data/sample-test-cases';
 import { RuleEngineService } from './rule-engine.service';
@@ -38,8 +38,14 @@ export class RuleStoreService {
 
   /** Populate demo test cases + run history the first time the app is opened. */
   private seedSampleDataIfEmpty() {
-    const seededFlag = localStorage.getItem(LS_SEED_KEY);
-    if (this.testCases().length > 0 || this.runHistory().length > 0 || seededFlag) {
+    const SEED_VERSION = '2';
+    const storedVersion = localStorage.getItem(LS_SEED_KEY);
+    const cases = this.testCases();
+    const isEmpty = cases.length === 0 && this.runHistory().length === 0;
+    const isPureSeed = cases.length > 0 && cases.every((c) => c.id.startsWith('tc_seed_'));
+
+    // Seed when empty, or upgrade untouched demo data to the latest seed version.
+    if (!isEmpty && !(storedVersion !== SEED_VERSION && isPureSeed)) {
       return;
     }
     const { testCases, runHistory } = buildSampleData(this.engine, this.allRules());
@@ -47,7 +53,7 @@ export class RuleStoreService {
     this.runHistory.set(runHistory);
     localStorage.setItem(LS_CASES_KEY, JSON.stringify(testCases));
     localStorage.setItem(LS_RUNS_KEY, JSON.stringify(runHistory));
-    localStorage.setItem(LS_SEED_KEY, '1');
+    localStorage.setItem(LS_SEED_KEY, SEED_VERSION);
   }
 
   readonly selectedRule = computed(() =>
@@ -108,16 +114,59 @@ export class RuleStoreService {
       localStorage.setItem(LS_RUNS_KEY, JSON.stringify(next));
       return next;
     });
-    // Update lastRunAt / lastResult on the test case
+    // Update lastRunAt / lastResult / lastAssertion on the test case
     this.testCases.update(list => {
       const next = list.map(tc =>
         tc.id === result.testCaseId
-          ? { ...tc, lastRunAt: result.runAt, lastResult: result.evalResult.status as 'PASSED' | 'FAILED' }
+          ? {
+              ...tc,
+              lastRunAt: result.runAt,
+              lastResult: result.evalResult.status as 'PASSED' | 'FAILED',
+              lastAssertion: result.assertion ?? 'none',
+            }
           : tc
       );
       localStorage.setItem(LS_CASES_KEY, JSON.stringify(next));
       return next;
     });
+  }
+
+  /** Set (or clear) the expected outcome assertion for a test case. */
+  setExpectedResult(id: string, expected: 'PASSED' | 'FAILED' | undefined) {
+    this.testCases.update(list => {
+      const next = list.map(tc => (tc.id === id ? { ...tc, expectedResult: expected } : tc));
+      localStorage.setItem(LS_CASES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  /** Evaluate a test case against its rule, record the run + assertion, and return it. */
+  executeTestCase(tc: TestCase): TestCaseRunResult {
+    const rule = this.allRules().find(r => r.rule_id === tc.ruleId);
+    const evalResult: EvalResult = rule
+      ? this.engine.evaluateRule(rule, tc.snapshot, this.allRules())
+      : { expression: `Rule ${tc.ruleId} not found`, operator: 'unknown', expected: '', actual: '', status: 'FAILED' };
+    const status = evalResult.status === 'PASSED' ? 'PASSED' : 'FAILED';
+    const expected = tc.expectedResult;
+    const assertion: 'match' | 'mismatch' | 'none' = !expected ? 'none' : status === expected ? 'match' : 'mismatch';
+
+    const run: TestCaseRunResult = {
+      id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      testCaseId: tc.id,
+      ruleId: tc.ruleId,
+      runAt: new Date().toISOString(),
+      evalResult,
+      snapshot: tc.snapshot,
+      expectedResult: expected,
+      assertion,
+    };
+    this.addRunResult(run);
+    return run;
+  }
+
+  /** Run a batch of test cases sequentially, returning all run results. */
+  executeTestCases(cases: TestCase[]): TestCaseRunResult[] {
+    return cases.map(tc => this.executeTestCase(tc));
   }
 
   runsForTestCase(testCaseId: string): TestCaseRunResult[] {

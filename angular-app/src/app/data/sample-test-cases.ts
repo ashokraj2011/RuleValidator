@@ -10,6 +10,8 @@ interface SeedCase {
   snapshot: TestDataSnapshot;
   /** how many historical runs to fabricate for this case */
   runs?: number;
+  /** asserted expected outcome */
+  expected?: 'PASSED' | 'FAILED';
 }
 
 // Demo test cases per rule, mixing PASS / FAIL / short-circuit scenarios so the
@@ -24,6 +26,7 @@ const SEED_CASES: SeedCase[] = [
     dbKeys: { customer: 'CUST-10042' },
     snapshot: { customer: { age: 34, country: 'US', status: 'ACTIVE', tags: ['VIP', 'EARLY_ADOPTER'] } },
     runs: 3,
+    expected: 'PASSED',
   },
   {
     id: 'tc_seed_2',
@@ -33,6 +36,7 @@ const SEED_CASES: SeedCase[] = [
     dbKeys: { customer: 'CUST-20881' },
     snapshot: { customer: { age: 16, country: 'US', status: 'ACTIVE', tags: [] } },
     runs: 2,
+    expected: 'FAILED',
   },
   {
     id: 'tc_seed_3',
@@ -42,6 +46,7 @@ const SEED_CASES: SeedCase[] = [
     dbKeys: { customer: 'CUST-33150' },
     snapshot: { customer: { age: 41, country: 'GB', status: 'ACTIVE', tags: ['VIP'] } },
     runs: 1,
+    expected: 'PASSED',
   },
 
   // --- rule_2: Active customer with VIP tag ---
@@ -53,6 +58,7 @@ const SEED_CASES: SeedCase[] = [
     dbKeys: { customer: 'CUST-10042' },
     snapshot: { customer: { status: 'ACTIVE', tags: ['VIP', 'EARLY_ADOPTER'] } },
     runs: 2,
+    expected: 'PASSED',
   },
   {
     id: 'tc_seed_5',
@@ -62,6 +68,7 @@ const SEED_CASES: SeedCase[] = [
     dbKeys: { customer: 'CUST-77231' },
     snapshot: { customer: { status: 'INACTIVE', tags: ['VIP'] } },
     runs: 1,
+    expected: 'FAILED',
   },
 
   // --- rule_3: CrossSell Campaign Eligibility (chains rule_1 + rule_2) ---
@@ -76,6 +83,7 @@ const SEED_CASES: SeedCase[] = [
       account: { balance: 8200, type: 'CHECKING' },
     },
     runs: 2,
+    expected: 'PASSED',
   },
   {
     id: 'tc_seed_7',
@@ -88,6 +96,7 @@ const SEED_CASES: SeedCase[] = [
       account: { balance: 1200, type: 'CHECKING' },
     },
     runs: 1,
+    expected: 'FAILED',
   },
 
   // --- rule_4: High-value customer check ---
@@ -102,6 +111,7 @@ const SEED_CASES: SeedCase[] = [
       account: { balance: 75000, type: 'INVESTMENT' },
     },
     runs: 2,
+    expected: 'PASSED',
   },
   {
     id: 'tc_seed_9',
@@ -114,6 +124,7 @@ const SEED_CASES: SeedCase[] = [
       account: { balance: 20000, type: 'CHECKING' },
     },
     runs: 1,
+    expected: 'FAILED',
   },
 ];
 
@@ -136,10 +147,12 @@ export function buildSampleData(
     const numRuns = seed.runs ?? 1;
     let lastRunAt: string | undefined;
     let lastResult: 'PASSED' | 'FAILED' | undefined;
+    let lastAssertion: 'match' | 'mismatch' | 'none' = 'none';
 
     for (let i = 0; i < numRuns; i++) {
       const evalResult = engine.evaluateRule(rule, seed.snapshot, rules);
       const status = evalResult.status === 'PASSED' ? 'PASSED' : 'FAILED';
+      const assertion: 'match' | 'mismatch' | 'none' = !seed.expected ? 'none' : status === seed.expected ? 'match' : 'mismatch';
       // space runs out over the last few days, newest last
       const runAt = new Date(
         now - (numRuns - 1 - i) * (DAY / 2) - caseIdx * 60 * 60 * 1000,
@@ -151,9 +164,12 @@ export function buildSampleData(
         runAt,
         evalResult,
         snapshot: seed.snapshot,
+        expectedResult: seed.expected,
+        assertion,
       });
       lastRunAt = runAt;
       lastResult = status;
+      lastAssertion = assertion;
     }
 
     testCases.push({
@@ -166,6 +182,8 @@ export function buildSampleData(
       createdAt,
       lastRunAt,
       lastResult,
+      expectedResult: seed.expected,
+      lastAssertion,
     });
   });
 

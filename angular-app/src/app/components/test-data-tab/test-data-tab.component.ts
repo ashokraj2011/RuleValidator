@@ -49,6 +49,7 @@ export class TestDataTabComponent {
   readonly showSaveModal = signal(false);
   readonly saveName = signal('');
   readonly saveDescription = signal('');
+  readonly saveExpected = signal<'PASSED' | 'FAILED' | 'NONE'>('NONE');
 
   readonly allNamespacesReady = computed(() =>
     this.namespaces().every((namespace) => {
@@ -475,6 +476,7 @@ export class TestDataTabComponent {
     if (!this.allNamespacesReady()) { this.store.showToast('⚠️ Provide data for all namespaces first.'); return; }
     this.saveName.set('');
     this.saveDescription.set('');
+    this.saveExpected.set('NONE');
     this.showSaveModal.set(true);
   }
 
@@ -489,6 +491,7 @@ export class TestDataTabComponent {
       dbKeys[ns] = configs[ns]?.dbKey ?? '';
     }
 
+    const expected = this.saveExpected();
     const tc: TestCase = {
       id: `tc-${Date.now()}`,
       name,
@@ -497,6 +500,7 @@ export class TestDataTabComponent {
       dbKeys,
       snapshot: JSON.parse(JSON.stringify(snapshot)),
       createdAt: new Date().toISOString(),
+      expectedResult: expected === 'NONE' ? undefined : expected,
     };
     this.store.saveTestCase(tc);
     this.showSaveModal.set(false);

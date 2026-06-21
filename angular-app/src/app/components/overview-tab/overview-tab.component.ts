@@ -35,6 +35,38 @@ export class OverviewTabComponent {
 
   readonly searchQuery = signal('');
   readonly healthFilter = signal<'all' | 'healthy' | 'failing' | 'untested'>('all');
+  readonly runningAll = signal(false);
+
+  /** Flat list of every test case with its rule + latest assertion state. */
+  readonly caseResults = computed(() => {
+    const rules = this.store.allRules();
+    return this.store.testCases().map((tc) => ({
+      tc,
+      ruleName: rules.find((r) => r.rule_id === tc.ruleId)?.name ?? tc.ruleId,
+    }));
+  });
+
+  readonly assertionSummary = computed(() => {
+    const cases = this.store.testCases();
+    return {
+      asserted: cases.filter((c) => c.expectedResult).length,
+      matches: cases.filter((c) => c.lastAssertion === 'match').length,
+      regressions: cases.filter((c) => c.lastAssertion === 'mismatch').length,
+    };
+  });
+
+  async runAllTests() {
+    const cases = this.store.testCases();
+    if (!cases.length) { this.store.showToast('No test cases to run.'); return; }
+    this.runningAll.set(true);
+    await new Promise((r) => setTimeout(r, 200));
+    const runs = this.store.executeTestCases(cases);
+    this.runningAll.set(false);
+    const passed = runs.filter((r) => r.evalResult.status === 'PASSED').length;
+    const regressions = runs.filter((r) => r.assertion === 'mismatch').length;
+    const regTag = regressions ? ` • ${regressions} regression${regressions !== 1 ? 's' : ''} ⚠️` : '';
+    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} across all rules — ${passed} passed, ${runs.length - passed} failed${regTag}`);
+  }
 
   /** Per-rule health derived from rules, saved test cases, and run history. */
   readonly ruleHealth = computed((): RuleHealth[] => {
@@ -155,6 +187,11 @@ export class OverviewTabComponent {
   openRule(h: RuleHealth, tab: 'test-data' | 'generated' | 'test-runs' | 'coverage') {
     this.store.selectRule(h.rule.rule_id);
     this.store.activeTab.set(tab);
+  }
+
+  openTestCases(ruleId: string) {
+    this.store.selectRule(ruleId);
+    this.store.activeTab.set('generated');
   }
 
   coverageColor(pct: number): string {

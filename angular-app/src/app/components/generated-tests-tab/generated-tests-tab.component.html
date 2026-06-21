@@ -6,13 +6,23 @@
       <p class="mt-0.5 text-sm text-neutral-500">
         Saved test cases for <span class="font-bold text-secondary">{{ store.selectedRule().name }}</span>
         — {{ testCases().length }} case{{ testCases().length !== 1 ? 's' : '' }}
+        <span *ngIf="assertionSummary().asserted" class="ml-1">
+          • {{ assertionSummary().asserted }} asserted<span *ngIf="assertionSummary().regressions" class="font-bold text-red-600"> • {{ assertionSummary().regressions }} regression{{ assertionSummary().regressions !== 1 ? 's' : '' }}</span>
+        </span>
       </p>
     </div>
-    <button type="button" (click)="store.activeTab.set('test-data')"
-      class="flex items-center gap-2 rounded bg-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90">
-      <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon>
-      New Test Case
-    </button>
+    <div class="flex items-center gap-2">
+      <button type="button" (click)="runAll()" [disabled]="runningAll() || !testCases().length"
+        class="flex items-center gap-2 rounded border border-secondary px-4 py-2 text-xs font-bold text-secondary hover:bg-secondary/5 disabled:opacity-50">
+        <lucide-icon [name]="runningAll() ? 'refresh-cw' : 'circle-play'" class="h-3.5 w-3.5" [class.animate-spin]="runningAll()"></lucide-icon>
+        {{ runningAll() ? 'Running…' : 'Run All' }}
+      </button>
+      <button type="button" (click)="store.activeTab.set('test-data')"
+        class="flex items-center gap-2 rounded bg-primary px-4 py-2 text-xs font-bold text-white hover:opacity-90">
+        <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon>
+        New Test Case
+      </button>
+    </div>
   </div>
 
   <!-- Empty state -->
@@ -41,7 +51,7 @@
       </div>
 
       <div class="flex-1 min-w-0 cursor-pointer" (click)="toggleExpand(tc.id)">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <span class="text-sm font-bold text-neutral-900">{{ tc.name }}</span>
           <span *ngIf="tc.lastResult" class="rounded px-2 py-0.5 text-[9px] font-bold uppercase"
             [ngClass]="tc.lastResult === 'PASSED' ? 'bg-green-100 text-fidelity-green-bright' : 'bg-red-100 text-red-600'">
@@ -49,6 +59,18 @@
           </span>
           <span *ngIf="!tc.lastResult" class="rounded bg-neutral-100 px-2 py-0.5 text-[9px] font-bold uppercase text-neutral-500">
             NOT RUN
+          </span>
+          <!-- Assertion badge -->
+          <span *ngIf="tc.lastAssertion === 'mismatch'" class="flex items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white">
+            <lucide-icon name="triangle-alert" class="h-3 w-3"></lucide-icon>
+            Regression
+          </span>
+          <span *ngIf="tc.lastAssertion === 'match'" class="flex items-center gap-1 rounded bg-green-50 px-2 py-0.5 text-[9px] font-bold uppercase text-fidelity-green-bright">
+            <lucide-icon name="circle-check" class="h-3 w-3"></lucide-icon>
+            Meets expected
+          </span>
+          <span *ngIf="tc.expectedResult && !tc.lastResult" class="rounded border border-neutral-300 px-2 py-0.5 text-[9px] font-bold uppercase text-neutral-500">
+            Expect {{ tc.expectedResult }}
           </span>
         </div>
         <p class="mt-0.5 text-xs text-neutral-400 truncate">
@@ -59,6 +81,18 @@
 
       <!-- Actions -->
       <div class="flex shrink-0 items-center gap-1.5">
+        <!-- Expected-result assertion selector -->
+        <div class="mr-1 flex overflow-hidden rounded border border-neutral-200" title="Expected result assertion">
+          <button type="button" (click)="setExpected(tc, 'NONE')"
+            class="px-1.5 py-1 text-[9px] font-bold uppercase transition-colors"
+            [ngClass]="!tc.expectedResult ? 'bg-neutral-600 text-white' : 'bg-white text-neutral-400 hover:bg-neutral-50'">—</button>
+          <button type="button" (click)="setExpected(tc, 'PASSED')"
+            class="border-l border-neutral-200 px-1.5 py-1 text-[9px] font-bold uppercase transition-colors"
+            [ngClass]="tc.expectedResult === 'PASSED' ? 'bg-green-600 text-white' : 'bg-white text-green-700 hover:bg-green-50'">Pass</button>
+          <button type="button" (click)="setExpected(tc, 'FAILED')"
+            class="border-l border-neutral-200 px-1.5 py-1 text-[9px] font-bold uppercase transition-colors"
+            [ngClass]="tc.expectedResult === 'FAILED' ? 'bg-red-600 text-white' : 'bg-white text-red-700 hover:bg-red-50'">Fail</button>
+        </div>
         <button type="button" (click)="runTestCase(tc)" [disabled]="runningCaseId() === tc.id"
           class="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50">
           <lucide-icon [name]="runningCaseId() === tc.id ? 'refresh-cw' : 'circle-play'"

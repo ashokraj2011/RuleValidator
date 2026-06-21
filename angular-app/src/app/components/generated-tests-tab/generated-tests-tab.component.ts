@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
 import { TestCase, TestCaseRunResult } from '../../models/types';
 import { MockDbService } from '../../services/mock-db.service';
-import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 
 @Component({
@@ -16,12 +15,23 @@ import { RuleStoreService } from '../../services/rule-store.service';
 })
 export class GeneratedTestsTabComponent {
   readonly store = inject(RuleStoreService);
-  private readonly ruleEngine = inject(RuleEngineService);
   private readonly mockDb = inject(MockDbService);
 
   readonly testCases = computed(() => this.store.casesForSelectedRule());
   readonly expandedCaseId = signal<string | null>(null);
   readonly runningCaseId = signal<string | null>(null);
+  readonly runningAll = signal(false);
+
+  readonly assertionSummary = computed(() => {
+    const cases = this.testCases();
+    const asserted = cases.filter(c => c.expectedResult);
+    return {
+      total: cases.length,
+      asserted: asserted.length,
+      regressions: cases.filter(c => c.lastAssertion === 'mismatch').length,
+      matches: cases.filter(c => c.lastAssertion === 'match').length,
+    };
+  });
 
   toggleExpand(id: string) {
     this.expandedCaseId.update(cur => cur === id ? null : id);
@@ -32,21 +42,27 @@ export class GeneratedTestsTabComponent {
   async runTestCase(tc: TestCase) {
     this.runningCaseId.set(tc.id);
     await new Promise(r => setTimeout(r, 120));
-    const rule = this.store.allRules().find(r => r.rule_id === tc.ruleId);
-    if (!rule) { this.runningCaseId.set(null); return; }
-
-    const evalResult = this.ruleEngine.evaluateRule(rule, tc.snapshot, this.store.allRules());
-    const run: TestCaseRunResult = {
-      id: `run-${Date.now()}`,
-      testCaseId: tc.id,
-      ruleId: tc.ruleId,
-      runAt: new Date().toISOString(),
-      evalResult,
-      snapshot: tc.snapshot,
-    };
-    this.store.addRunResult(run);
+    const run = this.store.executeTestCase(tc);
     this.runningCaseId.set(null);
-    this.store.showToast(`${evalResult.status === 'PASSED' ? '✅' : '❌'} "${tc.name}" — ${evalResult.status}`);
+    const tag = run.assertion === 'mismatch' ? ' ⚠️ REGRESSION' : run.assertion === 'match' ? ' ✓ matches expected' : '';
+    this.store.showToast(`${run.evalResult.status === 'PASSED' ? '✅' : '❌'} "${tc.name}" — ${run.evalResult.status}${tag}`);
+  }
+
+  async runAll() {
+    const cases = this.testCases();
+    if (!cases.length) { this.store.showToast('No test cases to run.'); return; }
+    this.runningAll.set(true);
+    await new Promise(r => setTimeout(r, 150));
+    const runs = this.store.executeTestCases(cases);
+    this.runningAll.set(false);
+    const passed = runs.filter(r => r.evalResult.status === 'PASSED').length;
+    const regressions = runs.filter(r => r.assertion === 'mismatch').length;
+    const regTag = regressions ? ` • ${regressions} regression${regressions !== 1 ? 's' : ''} ⚠️` : '';
+    this.store.showToast(`▶️ Ran ${runs.length} test case${runs.length !== 1 ? 's' : ''} — ${passed} passed, ${runs.length - passed} failed${regTag}`);
+  }
+
+  setExpected(tc: TestCase, value: 'PASSED' | 'FAILED' | 'NONE') {
+    this.store.setExpectedResult(tc.id, value === 'NONE' ? undefined : value);
   }
 
   loadAndEvaluate(tc: TestCase) {
