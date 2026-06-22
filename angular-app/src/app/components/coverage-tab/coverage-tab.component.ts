@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { LucideAngularModule } from 'lucide-angular';
-import { ConditionStats } from '../../models/types';
+import { ConditionStats, TestCase } from '../../models/types';
+import { coverageGaps } from '../../kernel';
 import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 
@@ -15,6 +16,53 @@ import { RuleStoreService } from '../../services/rule-store.service';
 export class CoverageTabComponent {
   readonly store = inject(RuleStoreService);
   private readonly ruleEngine = inject(RuleEngineService);
+
+  /** Real MC/DC branch-coverage report (both TRUE and FALSE per condition). */
+  readonly report = computed(() => this.store.coverageReport());
+
+  /** Conditions still missing a TRUE and/or FALSE branch. */
+  readonly gaps = computed(() => coverageGaps(this.report()));
+
+  /**
+   * For each uncovered branch, synthesize a targeted snapshot that drives that
+   * specific condition to the missing truth (TRUE/FALSE) while keeping it
+   * reachable, save it as a case, and run it — so coverage actually closes.
+   */
+  coverGaps() {
+    const rule = this.store.selectedRule();
+    const allRules = this.store.allRules();
+    const stamp = new Date().toISOString();
+    let made = 0;
+
+    for (const gap of this.gaps()) {
+      const wants = [gap.needsTrue ? true : null, gap.needsFalse ? false : null].filter((w): w is boolean => w !== null);
+      for (const want of wants) {
+        const snapshot = this.ruleEngine.synthesizeBranch(rule, gap.expression, want, allRules);
+        if (!Object.keys(snapshot).length) continue;
+        const tc: TestCase = {
+          id: `tc_cov_${rule.rule_id}_${made}_${Date.now()}`,
+          name: `Coverage: ${gap.expression} = ${want ? 'TRUE' : 'FALSE'}`,
+          description: 'Auto-synthesized to close a coverage gap.',
+          ruleId: rule.rule_id,
+          source: 'system',
+          tags: ['coverage'],
+          dbKeys: {},
+          snapshot,
+          createdAt: stamp,
+        };
+        this.store.saveTestCase(tc);
+        this.store.executeTestCase(tc);
+        made++;
+      }
+    }
+    this.store.showToast(made ? `🤖 Synthesized & ran ${made} case(s) to close coverage gaps.` : '⚠️ No coverable gaps found.');
+  }
+
+  branchBarColor(pct: number): string {
+    if (pct >= 80) return 'bg-green-500';
+    if (pct >= 50) return 'bg-yellow-400';
+    return 'bg-red-500';
+  }
 
   /** Aggregate condition stats derived from actual run history for the selected rule. */
   readonly conditionStats = computed((): ConditionStats[] => {

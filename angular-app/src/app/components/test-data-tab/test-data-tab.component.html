@@ -4,7 +4,7 @@
       <div class="flex items-center gap-3">
         <lucide-icon name="database" class="h-4.5 w-4.5 text-primary"></lucide-icon>
         <div>
-          <span class="text-sm font-bold text-neutral-800">Test Data — </span>
+          <span class="text-sm font-bold text-neutral-800">Test Rule — </span>
           <span class="text-sm font-bold text-primary">{{ store.selectedRule().name }}</span>
         </div>
         <span class="ml-2 rounded bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-secondary">
@@ -224,6 +224,14 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <span class="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+              [ngClass]="getSource(namespace) === 'live' ? 'bg-sky-100 text-sky-700' : 'bg-neutral-200 text-neutral-600'">
+              {{ getSource(namespace) === 'live' ? 'Live DB' : 'Pinned' }}
+            </span>
+            <span *ngIf="hasDrift(namespace)" class="flex items-center gap-1 text-[10px] font-bold text-amber-600" title="Live DB differs from your stored data">
+              <lucide-icon name="diff" class="h-3.5 w-3.5"></lucide-icon>
+              DRIFT
+            </span>
             <span *ngIf="hasData(namespace) && !hasError(namespace)" class="flex items-center gap-1 text-[10px] font-bold text-fidelity-green-bright">
               <lucide-icon name="circle-check" class="h-3.5 w-3.5"></lucide-icon>
               {{ getConfig(namespace)?.isEdited ? 'EDITED' : 'FETCHED' }}
@@ -240,6 +248,58 @@
         </div>
 
         <div *ngIf="isExpanded(namespace)" class="space-y-3 p-4">
+          <!-- Data source: pinned snapshot vs live DB -->
+          <div class="flex flex-wrap items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50/70 px-3 py-2">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Data source</span>
+            <div class="flex overflow-hidden rounded border border-neutral-300 bg-white">
+              <button type="button" (click)="setSource(namespace, 'pinned')"
+                class="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold transition-colors"
+                [ngClass]="getSource(namespace) === 'pinned' ? 'bg-neutral-700 text-white' : 'text-neutral-600 hover:bg-neutral-50'">
+                <lucide-icon name="save" class="h-3 w-3"></lucide-icon>
+                Pinned snapshot
+              </button>
+              <button type="button" (click)="setSource(namespace, 'live')"
+                class="flex items-center gap-1.5 border-l border-neutral-300 px-3 py-1 text-[11px] font-bold transition-colors"
+                [ngClass]="getSource(namespace) === 'live' ? 'bg-sky-600 text-white' : 'text-neutral-600 hover:bg-neutral-50'">
+                <lucide-icon name="database" class="h-3 w-3"></lucide-icon>
+                Live (DB)
+              </button>
+            </div>
+            <span class="text-[11px] text-neutral-500">
+              {{ getSource(namespace) === 'live'
+                  ? 'Evaluation tracks the DB record — refresh to pull current data.'
+                  : 'Evaluation uses your stored/edited copy — refresh only flags drift, never overwrites.' }}
+            </span>
+            <span *ngIf="liveFetchedLabel(namespace)" class="ml-auto flex items-center gap-1 text-[10px] text-neutral-400">
+              <lucide-icon name="clock" class="h-3 w-3"></lucide-icon>
+              DB last read {{ liveFetchedLabel(namespace) }}
+            </span>
+          </div>
+
+          <!-- Drift banner: live DB differs from pinned snapshot -->
+          <div *ngIf="hasDrift(namespace)" class="rounded-lg border border-amber-300 bg-amber-50/70 px-3 py-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="flex items-center gap-1.5 text-xs font-bold text-amber-700">
+                <lucide-icon name="diff" class="h-4 w-4"></lucide-icon>
+                Live DB differs from your stored data — {{ driftFor(namespace).length }} field{{ driftFor(namespace).length !== 1 ? 's' : '' }}
+              </span>
+              <div class="flex gap-2">
+                <button type="button" (click)="adoptLive(namespace)"
+                  class="rounded bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white hover:opacity-90">Adopt live</button>
+                <button type="button" (click)="dismissDrift(namespace)"
+                  class="rounded border border-amber-300 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100">Keep stored</button>
+              </div>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              <span *ngFor="let d of driftFor(namespace)" class="rounded border border-amber-200 bg-white px-2 py-0.5 font-mono text-[10px]">
+                {{ d.field }}:
+                <span class="text-neutral-500 line-through">{{ d.stored === undefined ? '∅' : (d.stored | json) }}</span>
+                →
+                <span class="font-bold text-amber-700">{{ d.live === undefined ? '∅' : (d.live | json) }}</span>
+              </span>
+            </div>
+          </div>
+
           <div class="flex items-end gap-3">
             <div class="flex-1">
               <label class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">DB Lookup Key</label>
@@ -260,12 +320,13 @@
                 </div>
                 <button
                   type="button"
-                  (click)="fetchNamespace(namespace)"
+                  (click)="refreshFromDb(namespace)"
                   [disabled]="isLoading(namespace)"
                   class="flex items-center gap-1.5 rounded bg-secondary px-3 py-2 text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-50"
+                  title="Re-read this namespace's record from the database"
                 >
-                  <lucide-icon [name]="isLoading(namespace) ? 'refresh-cw' : 'download'" class="h-3.5 w-3.5" [class.animate-spin]="isLoading(namespace)"></lucide-icon>
-                  {{ isLoading(namespace) ? 'Fetching...' : 'Fetch' }}
+                  <lucide-icon name="refresh-cw" class="h-3.5 w-3.5" [class.animate-spin]="isLoading(namespace)"></lucide-icon>
+                  {{ isLoading(namespace) ? 'Refreshing…' : 'Refresh from DB' }}
                 </button>
               </div>
 

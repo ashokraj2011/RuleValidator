@@ -13,7 +13,7 @@
         <lucide-icon [name]="runningAll() ? 'refresh-cw' : 'circle-play'" class="h-4 w-4" [class.animate-spin]="runningAll()"></lucide-icon>
         {{ runningAll() ? 'Running…' : selectionStats().cases ? 'Run selected (' + selectionStats().cases + ')' : 'Run selected' }}
       </button>
-      <div class="flex items-center gap-3 rounded-lg border border-neutral-300 bg-white px-5 py-2.5 shadow-xs">
+      <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-5 py-2.5 shadow-card">
         <div class="flex flex-col">
           <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Overall Health</span>
           <span class="text-xs font-bold" [ngClass]="scoreColor(healthScore())">{{ healthScoreLabel() }}</span>
@@ -34,7 +34,7 @@
 
   <!-- KPI cards -->
   <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <div class="rounded-lg border border-neutral-200 bg-white p-4 shadow-xs">
+    <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card card-hover">
       <div class="flex items-center justify-between">
         <lucide-icon name="layers" class="h-5 w-5 text-secondary"></lucide-icon>
         <span class="text-2xl font-extrabold text-neutral-900">{{ summary().totalRules }}</span>
@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div class="rounded-lg border border-neutral-200 bg-white p-4 shadow-xs">
+    <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card card-hover">
       <div class="flex items-center justify-between">
         <lucide-icon name="clipboard-check" class="h-5 w-5 text-secondary"></lucide-icon>
         <span class="text-2xl font-extrabold text-neutral-900">{{ summary().totalCases }}</span>
@@ -56,7 +56,7 @@
       <div class="mt-2 text-[10px] font-bold text-neutral-400">{{ summary().totalRuns }} total runs</div>
     </div>
 
-    <div class="rounded-lg border border-neutral-200 bg-white p-4 shadow-xs">
+    <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card card-hover">
       <div class="flex items-center justify-between">
         <lucide-icon name="circle-check" class="h-5 w-5 text-fidelity-green-bright"></lucide-icon>
         <span class="text-2xl font-extrabold" [ngClass]="scoreColor(summary().overallPassRate)">{{ summary().overallPassRate }}%</span>
@@ -68,7 +68,7 @@
       </div>
     </div>
 
-    <div class="rounded-lg border border-neutral-200 bg-white p-4 shadow-xs">
+    <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card card-hover">
       <div class="flex items-center justify-between">
         <lucide-icon name="trending-up" class="h-5 w-5 text-secondary"></lucide-icon>
         <span class="text-2xl font-extrabold" [ngClass]="scoreColor(summary().avgCoverage)">{{ summary().avgCoverage }}%</span>
@@ -107,7 +107,7 @@
   </div>
 
   <!-- Selection / run scope toolbar -->
-  <div class="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-xs lg:flex-row lg:items-center lg:justify-between">
+  <div class="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-card lg:flex-row lg:items-center lg:justify-between">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Run scope</span>
       <span class="text-xs text-neutral-400">Quick select:</span>
@@ -145,7 +145,7 @@
   </div>
 
   <!-- Rules health table -->
-  <div class="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-xs">
+  <div class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card">
     <div class="overflow-x-auto">
       <table class="w-full border-collapse text-left text-xs">
         <thead>
@@ -218,7 +218,7 @@
             <!-- Actions -->
             <td class="p-3 pr-5">
               <div class="flex items-center justify-end gap-1">
-                <button type="button" (click)="openRule(h, 'test-data')" title="Test Data"
+                <button type="button" (click)="openRule(h, 'test-data')" title="Test Rule"
                   class="rounded border border-neutral-200 p-1.5 text-neutral-400 hover:border-secondary hover:text-secondary">
                   <lucide-icon name="database" class="h-3.5 w-3.5"></lucide-icon>
                 </button>
@@ -251,7 +251,7 @@
   </div>
 
   <!-- Test Results matrix -->
-  <div class="rounded-lg border border-neutral-300 bg-white shadow-xs" *ngIf="caseResults().length > 0">
+  <div class="rounded-xl border border-neutral-200 bg-white shadow-card" *ngIf="caseResults().length > 0">
     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-5 py-3">
       <h3 class="text-sm font-bold text-neutral-800">Test Results</h3>
       <div class="flex items-center gap-3 text-[10px] font-bold">
@@ -327,7 +327,7 @@
   </div>
 
   <!-- Recent activity -->
-  <div class="rounded-lg border border-neutral-300 bg-white shadow-xs" *ngIf="store.runHistory().length > 0">
+  <div class="rounded-xl border border-neutral-200 bg-white shadow-card" *ngIf="store.runHistory().length > 0">
     <div class="border-b border-neutral-200 bg-neutral-50 px-5 py-3">
       <h3 class="text-sm font-bold text-neutral-800">Recent Test Runs</h3>
     </div>

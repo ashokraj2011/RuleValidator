@@ -8,359 +8,113 @@ import {
   Term,
   TestDataSnapshot,
 } from '../models/types';
+import {
+  Evaluator,
+  Finding,
+  Linter,
+  SAMPLE_SCHEMA,
+  SchemaRegistry,
+  Synthesizer,
+  comparisonLabel,
+  flattenConditions,
+  isComparisonTerm,
+  isLogicalTerm,
+  isRuleRefTerm,
+  operatorDisplay,
+} from '../kernel';
 
+/**
+ * Thin Angular facade over the framework-agnostic kernel. Keeps the public API
+ * the components already depend on, but the actual logic — evaluation, synthesis,
+ * linting — now lives in the sound, unit-tested kernel.
+ */
 @Injectable({ providedIn: 'root' })
 export class RuleEngineService {
-  /**
-   * Namespaces whose data is supplied by the calling application at evaluation
-   * time (request/session context) rather than fetched from the database.
-   */
+  /** Legacy session-namespace names, used as a fallback when a namespace is not in the schema. */
   static readonly SESSION_NAMESPACES = ['session', 'context', 'request'];
 
+  /** The schema the kernel uses for typed coercion and linting. */
+  readonly schema: SchemaRegistry = SAMPLE_SCHEMA;
+
   isSessionNamespace(namespace: string): boolean {
+    if (this.schema.hasNamespace(namespace)) return this.schema.isSession(namespace);
     return RuleEngineService.SESSION_NAMESPACES.includes(namespace.toLowerCase());
   }
 
   isLogicalTerm(term: Term): term is LogicalTerm {
-    return 'operator' in term && 'terms' in term && !('namespace' in term) && !('rule_ref' in term);
+    return isLogicalTerm(term);
   }
-
   isComparisonTerm(term: Term): term is ComparisonTerm {
-    return 'namespace' in term && 'attribute' in term;
+    return isComparisonTerm(term);
   }
-
   isRuleRefTerm(term: Term): term is RuleRefTerm {
-    return 'rule_ref' in term;
-  }
-
-  extractNamespaces(rule: Rule, allRules?: Rule[]): string[] {
-    const namespaces = new Set<string>();
-
-    const walk = (term: Term) => {
-      if (this.isComparisonTerm(term)) {
-        namespaces.add(term.namespace);
-      } else if (this.isLogicalTerm(term)) {
-        term.terms.forEach(walk);
-      } else if (this.isRuleRefTerm(term) && allRules) {
-        const refRule = allRules.find((candidate) => candidate.rule_id === term.rule_ref);
-        if (refRule) {
-          walk(refRule.terms);
-        }
-      }
-    };
-
-    walk(rule.terms);
-    return Array.from(namespaces);
-  }
-
-  extractNamespaceAttributes(rule: Rule, allRules?: Rule[]): Record<string, string[]> {
-    const attrs: Record<string, Set<string>> = {};
-
-    const walk = (term: Term) => {
-      if (this.isComparisonTerm(term)) {
-        attrs[term.namespace] ??= new Set<string>();
-        attrs[term.namespace].add(term.attribute);
-      } else if (this.isLogicalTerm(term)) {
-        term.terms.forEach(walk);
-      } else if (this.isRuleRefTerm(term) && allRules) {
-        const refRule = allRules.find((candidate) => candidate.rule_id === term.rule_ref);
-        if (refRule) {
-          walk(refRule.terms);
-        }
-      }
-    };
-
-    walk(rule.terms);
-
-    return Object.fromEntries(
-      Object.entries(attrs).map(([namespace, set]) => [namespace, Array.from(set)]),
-    );
+    return isRuleRefTerm(term);
   }
 
   operatorDisplay(op: string): string {
-    return OPERATOR_DISPLAY[op] || op;
+    return operatorDisplay(op);
   }
 
-  evaluateRule(rule: Rule, data: TestDataSnapshot, allRules?: Rule[]): EvalResult {
-    return this.evaluateTerm(rule.terms, data, allRules);
+  /** All namespaces referenced by a rule (following rule_refs). */
+  extractNamespaces(rule: Rule, allRules: Rule[] = []): string[] {
+    return Object.keys(this.extractNamespaceAttributes(rule, allRules));
   }
 
-  private compare(actual: any, operator: string, expected: any): boolean {
-    switch (operator) {
-      case 'equal_to':
-        return actual === expected;
-      case 'not_equal_to':
-        return actual !== expected;
-      case 'greater_than':
-        return typeof actual === 'number' && actual > expected;
-      case 'greater_than_equal':
-        return typeof actual === 'number' && actual >= expected;
-      case 'less_than':
-        return typeof actual === 'number' && actual < expected;
-      case 'less_than_equal':
-        return typeof actual === 'number' && actual <= expected;
-      case 'contains':
-        if (Array.isArray(actual)) return actual.includes(expected);
-        if (typeof actual === 'string') return actual.includes(expected);
-        return false;
-      case 'not_contains':
-        if (Array.isArray(actual)) return !actual.includes(expected);
-        if (typeof actual === 'string') return !actual.includes(expected);
-        return true;
-      case 'in':
-        return Array.isArray(expected) && expected.includes(actual);
-      case 'not_in':
-        return Array.isArray(expected) && !expected.includes(actual);
-      case 'exists':
-        return actual !== null && actual !== undefined;
-      case 'not_exists':
-        return actual === null || actual === undefined;
-      default:
-        return false;
-    }
-  }
+  /** Namespace → attributes referenced by a rule (following rule_refs, cycle-safe). */
+  extractNamespaceAttributes(rule: Rule, allRules: Rule[] = []): Record<string, string[]> {
+    const index = new Map(allRules.map((r) => [r.rule_id, r]));
+    const attrs: Record<string, Set<string>> = {};
 
-  private evaluateTerm(term: Term, data: TestDataSnapshot, allRules?: Rule[]): EvalResult {
-    if (this.isComparisonTerm(term)) {
-      return this.evaluateComparison(term, data);
-    }
-
-    if (this.isLogicalTerm(term)) {
-      return this.evaluateLogical(term, data, allRules);
-    }
-
-    if (this.isRuleRefTerm(term) && allRules) {
-      const refRule = allRules.find((candidate) => candidate.rule_id === term.rule_ref);
-      if (refRule) {
-        const result = this.evaluateTerm(refRule.terms, data, allRules);
-        return {
-          ...result,
-          expression: `[Rule: ${refRule.name}] ${result.expression}`,
-        };
+    const walk = (term: Term, stack: Set<string>) => {
+      if (isComparisonTerm(term)) {
+        (attrs[term.namespace] ??= new Set<string>()).add(term.attribute);
+      } else if (isLogicalTerm(term)) {
+        term.terms.forEach((t) => walk(t, stack));
+      } else if (isRuleRefTerm(term)) {
+        const ref = index.get(term.rule_ref);
+        if (ref && !stack.has(term.rule_ref)) walk(ref.terms, new Set(stack).add(term.rule_ref));
       }
-
-      return {
-        expression: `[Rule Ref: ${term.rule_ref}] NOT FOUND`,
-        operator: 'ref',
-        expected: term.rule_ref,
-        actual: 'undefined',
-        status: 'FAILED',
-      };
-    }
-
-    return {
-      expression: 'Unknown term',
-      operator: 'unknown',
-      expected: '',
-      actual: '',
-      status: 'FAILED',
     };
+
+    walk(rule.terms, new Set([rule.rule_id]));
+    return Object.fromEntries(Object.entries(attrs).map(([ns, set]) => [ns, Array.from(set)]));
   }
 
-  private evaluateComparison(term: ComparisonTerm, data: TestDataSnapshot): EvalResult {
-    const namespaceData = data[term.namespace];
-    const actual = namespaceData ? namespaceData[term.attribute] : undefined;
-    const passed = this.compare(actual, term.operator, term.value);
-    const expression = `${term.namespace}.${term.attribute} ${this.operatorDisplay(term.operator)} ${JSON.stringify(term.value)}`;
-
-    return {
-      expression,
-      namespace: term.namespace,
-      attribute: term.attribute,
-      operator: term.operator,
-      expected: term.value,
-      actual: actual !== undefined ? actual : 'undefined',
-      status: passed ? 'PASSED' : 'FAILED',
-    };
+  /** Evaluate a rule against a data snapshot, producing a decision-trace tree. */
+  evaluateRule(rule: Rule, data: TestDataSnapshot, allRules: Rule[] = []): EvalResult {
+    return new Evaluator({ rules: allRules, schema: this.schema }).evaluate(rule, data);
   }
 
-  private evaluateLogical(term: LogicalTerm, data: TestDataSnapshot, allRules?: Rule[]): EvalResult {
-    const children: EvalResult[] = [];
-
-    if (term.operator === 'AND') {
-      let failedEarly = false;
-      for (const child of term.terms) {
-        if (failedEarly) {
-          children.push(this.makeSkipped(child, allRules));
-        } else {
-          const result = this.evaluateTerm(child, data, allRules);
-          children.push(result);
-          if (result.status === 'FAILED') failedEarly = true;
-        }
-      }
-      const status = failedEarly ? 'FAILED' : 'PASSED';
-      return { expression: 'AND Group', operator: 'AND', expected: 'AND', actual: status, status, children };
-    }
-
-    if (term.operator === 'OR') {
-      let passedEarly = false;
-      for (const child of term.terms) {
-        if (passedEarly) {
-          children.push(this.makeSkipped(child, allRules));
-        } else {
-          const result = this.evaluateTerm(child, data, allRules);
-          children.push(result);
-          if (result.status === 'PASSED') passedEarly = true;
-        }
-      }
-      const status = passedEarly ? 'PASSED' : 'FAILED';
-      return { expression: 'OR Group', operator: 'OR', expected: 'OR', actual: status, status, children };
-    }
-
-    // NOT — single child, invert
-    const child = this.evaluateTerm(term.terms[0], data, allRules);
-    const status = child.status === 'PASSED' ? 'FAILED' : 'PASSED';
-    return { expression: 'NOT Group', operator: 'NOT', expected: 'NOT', actual: status, status, children: [child] };
-  }
-
-  /** Build a SKIPPED node without evaluating (for short-circuited branches). */
-  private makeSkipped(term: Term, allRules?: Rule[]): EvalResult {
-    if (this.isComparisonTerm(term)) {
-      return {
-        expression: `${term.namespace}.${term.attribute} ${this.operatorDisplay(term.operator)} ${JSON.stringify(term.value)}`,
-        namespace: term.namespace,
-        attribute: term.attribute,
-        operator: term.operator,
-        expected: term.value,
-        actual: 'short-circuited',
-        status: 'SKIPPED',
-        shortCircuited: true,
-      };
-    }
-    if (this.isLogicalTerm(term)) {
-      return {
-        expression: `${term.operator} Group`,
-        operator: term.operator,
-        expected: term.operator,
-        actual: 'short-circuited',
-        status: 'SKIPPED',
-        shortCircuited: true,
-        children: term.terms.map((t) => this.makeSkipped(t, allRules)),
-      };
-    }
-    return {
-      expression: `[Rule Ref skipped]`,
-      operator: 'ref',
-      expected: '',
-      actual: 'short-circuited',
-      status: 'SKIPPED',
-      shortCircuited: true,
-    };
-  }
-
-  /** Flatten all leaf conditions from an EvalResult tree for coverage analysis. */
+  /** Flatten all leaf conditions from an EvalResult tree (for coverage analysis). */
   flattenConditions(result: EvalResult): EvalResult[] {
-    if (!result.children?.length) return [result];
-    return result.children.flatMap((child) => this.flattenConditions(child));
+    return flattenConditions(result);
+  }
+
+  /** Static analysis: type errors, undefined attributes, cyclic refs, contradictions. */
+  lint(rule: Rule, allRules: Rule[] = []): Finding[] {
+    return new Linter(allRules.length ? allRules : [rule], this.schema).lint(rule);
   }
 
   /**
-   * Synthesize a data snapshot that makes the rule evaluate to `target`
-   * (true = PASS, false = FAIL). Walks the term tree assigning satisfying or
-   * violating values per leaf comparison, following AND/OR/NOT semantics and
-   * descending into chained rules. Session/context namespaces are populated the
-   * same way — the calling application/engine supplies them at evaluation time.
+   * Synthesize a data snapshot that drives the rule to `target` (true = PASS,
+   * false = FAIL), via the constraint solver. Conflicts (unsatisfiable branches)
+   * are surfaced through `lint`; here we return the best-effort snapshot.
    */
-  synthesizeSnapshot(rule: Rule, target: boolean, allRules?: Rule[]): TestDataSnapshot {
-    const snapshot: TestDataSnapshot = {};
-    const setVal = (ns: string, attr: string, val: any) => {
-      snapshot[ns] ??= {};
-      if (val === undefined) delete snapshot[ns][attr];
-      else snapshot[ns][attr] = val;
-    };
-
-    const walk = (term: Term, want: boolean): void => {
-      if (this.isComparisonTerm(term)) {
-        const val = want
-          ? this.satisfyValue(term.operator, term.value)
-          : this.violateValue(term.operator, term.value);
-        setVal(term.namespace, term.attribute, val);
-        return;
-      }
-      if (this.isLogicalTerm(term)) {
-        if (term.operator === 'AND') {
-          // true → all children true; false → make the first child false, rest true
-          want ? term.terms.forEach((t) => walk(t, true)) : term.terms.forEach((t, i) => walk(t, i !== 0));
-        } else if (term.operator === 'OR') {
-          // true → one child true is enough (avoid conflicting siblings); false → all false
-          if (want) { if (term.terms.length) walk(term.terms[0], true); }
-          else term.terms.forEach((t) => walk(t, false));
-        } else if (term.terms.length) {
-          walk(term.terms[0], !want);
-        }
-        return;
-      }
-      if (this.isRuleRefTerm(term) && allRules) {
-        const ref = allRules.find((r) => r.rule_id === term.rule_ref);
-        if (ref) walk(ref.terms, want);
-      }
-    };
-
-    walk(rule.terms, target);
-    return snapshot;
+  synthesizeSnapshot(rule: Rule, target: boolean, allRules: Rule[] = []): TestDataSnapshot {
+    return new Synthesizer(allRules, this.schema).synthesize(rule, target).snapshot;
   }
 
-  private differ(value: any): any {
-    if (typeof value === 'number') return value + 1;
-    if (typeof value === 'boolean') return !value;
-    if (typeof value === 'string') return `${value}_X`;
-    return 'OTHER';
+  /**
+   * Synthesize a snapshot that drives one leaf condition (by its label) to a
+   * specific truth and keeps it reachable — used to close a coverage gap on a
+   * branch that whole-rule synthesis would short-circuit past.
+   */
+  synthesizeBranch(rule: Rule, targetLabel: string, want: boolean, allRules: Rule[] = []): TestDataSnapshot {
+    return new Synthesizer(allRules, this.schema).synthesizeBranch(rule, targetLabel, want).snapshot;
   }
 
-  private notInArray(arr: any): any {
-    if (!Array.isArray(arr) || !arr.length) return 'NONE';
-    if (arr.every((v) => typeof v === 'number')) return Math.max(...arr) + 1;
-    return `${String(arr[0])}_X`;
-  }
-
-  private satisfyValue(op: string, value: any): any {
-    switch (op) {
-      case 'equal_to': return value;
-      case 'not_equal_to': return this.differ(value);
-      case 'greater_than': return typeof value === 'number' ? value + 1 : value;
-      case 'greater_than_equal': return value;
-      case 'less_than': return typeof value === 'number' ? value - 1 : value;
-      case 'less_than_equal': return value;
-      case 'contains': return [value];
-      case 'not_contains': return [];
-      case 'in': return Array.isArray(value) ? value[0] : value;
-      case 'not_in': return this.notInArray(value);
-      case 'exists': return 'present';
-      case 'not_exists': return undefined;
-      default: return value;
-    }
-  }
-
-  private violateValue(op: string, value: any): any {
-    switch (op) {
-      case 'equal_to': return this.differ(value);
-      case 'not_equal_to': return value;
-      case 'greater_than': return typeof value === 'number' ? value : this.differ(value);
-      case 'greater_than_equal': return typeof value === 'number' ? value - 1 : this.differ(value);
-      case 'less_than': return value;
-      case 'less_than_equal': return typeof value === 'number' ? value + 1 : this.differ(value);
-      case 'contains': return [];
-      case 'not_contains': return [value];
-      case 'in': return this.notInArray(value);
-      case 'not_in': return Array.isArray(value) ? value[0] : value;
-      case 'exists': return undefined;
-      case 'not_exists': return 'present';
-      default: return this.differ(value);
-    }
+  /** Human-readable label for a comparison term. */
+  comparisonLabel(term: ComparisonTerm): string {
+    return comparisonLabel(term);
   }
 }
-
-const OPERATOR_DISPLAY: Record<string, string> = {
-  equal_to: '==',
-  not_equal_to: '!=',
-  greater_than: '>',
-  greater_than_equal: '>=',
-  less_than: '<',
-  less_than_equal: '<=',
-  contains: 'contains',
-  not_contains: 'not contains',
-  in: 'in',
-  not_in: 'not in',
-  exists: 'exists',
-  not_exists: 'not exists',
-};

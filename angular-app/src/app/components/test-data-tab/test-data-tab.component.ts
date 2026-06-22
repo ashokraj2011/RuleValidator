@@ -43,7 +43,7 @@ export class TestDataTabComponent {
   });
   readonly hasSessionData = computed(() => Object.keys(this.sessionNamespaceAttrs()).length > 0);
 
-  /** Sub-section of the Test Data tab: 'data' (grounded DB data) or 'invocation' (rule-call context). */
+  /** Sub-section of the Test Rule tab: 'data' (grounded DB data) or 'invocation' (rule-call context). */
   readonly dataView = signal<'data' | 'invocation'>('data');
 
   /** Session field values keyed by "namespace.attribute". */
@@ -54,6 +54,14 @@ export class TestDataTabComponent {
   readonly loadingNamespaces = signal<Set<string>>(new Set());
   readonly editingJson = signal<Record<string, string>>({});
   readonly jsonErrors = signal<Record<string, string>>({});
+
+  // --- Per-namespace data source ---
+  // 'pinned' = use the stored/edited snapshot (reproducible; DB refresh only flags drift).
+  // 'live'   = evaluation tracks the DB record; refresh pulls and adopts current data.
+  readonly sourceMode = signal<Record<string, 'pinned' | 'live'>>({});
+  readonly liveData = signal<Record<string, NamespaceData>>({});
+  readonly liveFetchedAt = signal<Record<string, string>>({});
+  readonly driftDismissed = signal<Set<string>>(new Set());
 
   // Per-namespace editor view: 'table' (spreadsheet grid) or 'json'
   readonly viewModes = signal<Record<string, 'table' | 'json'>>({});
@@ -488,19 +496,97 @@ export class TestDataTabComponent {
     this.namespaceConfigs.update(configs => ({ ...configs, [namespace]: { ...configs[namespace], dbKey: key } }));
   }
 
-  async fetchNamespace(namespace: string) {
-    const config = this.namespaceConfigs()[namespace];
-    if (!config?.dbKey) { this.store.showToast(`⚠️ Enter a DB key for "${namespace}" before fetching.`); return; }
+  // --- Data source mode ---
 
-    this.loadingNamespaces.update(current => new Set(current).add(namespace));
+  getSource(namespace: string): 'pinned' | 'live' {
+    return this.sourceMode()[namespace] ?? 'pinned';
+  }
+
+  setSource(namespace: string, mode: 'pinned' | 'live') {
+    if (this.getSource(namespace) === mode) return;
+    this.sourceMode.update((m) => ({ ...m, [namespace]: mode }));
+    if (mode === 'live') {
+      const live = this.liveData()[namespace];
+      if (live) {
+        this.upsertRecord(namespace, JSON.parse(JSON.stringify(live)));
+        this.store.showToast(`🛰 "${namespace}" now tracks live DB data.`);
+      } else {
+        this.store.showToast(`🛰 "${namespace}" set to live — Refresh from DB to pull current data.`);
+      }
+    } else {
+      this.store.showToast(`📌 "${namespace}" uses a pinned snapshot — DB refreshes won't overwrite it.`);
+    }
+  }
+
+  /** Re-read this namespace's record from the DB at any time, then adopt or flag drift. */
+  async refreshFromDb(namespace: string) {
+    const config = this.namespaceConfigs()[namespace];
+    if (!config?.dbKey) { this.store.showToast(`⚠️ Enter a DB key for "${namespace}" before refreshing.`); return; }
+
+    this.loadingNamespaces.update((current) => new Set(current).add(namespace));
     const data = await this.mockDb.fetchFromDb(namespace, config.dbKey);
-    this.loadingNamespaces.update(current => { const next = new Set(current); next.delete(namespace); return next; });
+    this.loadingNamespaces.update((current) => { const next = new Set(current); next.delete(namespace); return next; });
 
     if (!data) { this.store.showToast(`❌ No data found for "${namespace}" with key "${config.dbKey}".`); return; }
 
-    const cloned = JSON.parse(JSON.stringify(data)) as NamespaceData;
-    this.upsertRecord(namespace, cloned);
-    this.store.showToast(`✅ Fetched "${namespace}" data for key "${config.dbKey}" successfully.`);
+    const record = JSON.parse(JSON.stringify(data)) as NamespaceData;
+    this.liveData.update((m) => ({ ...m, [namespace]: record }));
+    this.liveFetchedAt.update((m) => ({ ...m, [namespace]: new Date().toISOString() }));
+    this.driftDismissed.update((s) => { const n = new Set(s); n.delete(namespace); return n; });
+
+    const storedEmpty = Object.keys(this.activeRecord(namespace)).length === 0;
+    if (this.getSource(namespace) === 'live' || storedEmpty) {
+      // Live mode (or first load) → adopt the DB record into the editor.
+      this.upsertRecord(namespace, JSON.parse(JSON.stringify(record)));
+      this.store.showToast(`✅ Loaded live "${namespace}" data for key "${config.dbKey}".`);
+    } else {
+      // Pinned mode → keep the stored snapshot, just report whether the DB drifted.
+      const drift = this.driftFor(namespace);
+      this.store.showToast(
+        drift.length
+          ? `⚠️ "${namespace}": live DB differs from your stored data (${drift.length} field${drift.length !== 1 ? 's' : ''}).`
+          : `✅ "${namespace}": live DB matches your stored data.`,
+      );
+    }
+  }
+
+  /** Field-level differences between the stored snapshot and the last live DB read. */
+  driftFor(namespace: string): { field: string; stored: any; live: any }[] {
+    const live = this.liveData()[namespace];
+    if (!live) return [];
+    const stored = this.activeRecord(namespace);
+    const fields = new Set([...Object.keys(stored), ...Object.keys(live)]);
+    const out: { field: string; stored: any; live: any }[] = [];
+    for (const f of fields) {
+      if (JSON.stringify(stored[f]) !== JSON.stringify(live[f])) {
+        out.push({ field: f, stored: stored[f], live: live[f] });
+      }
+    }
+    return out;
+  }
+
+  /** True when a pinned snapshot has drifted from the live DB and isn't dismissed. */
+  hasDrift(namespace: string): boolean {
+    return this.getSource(namespace) === 'pinned' && !this.driftDismissed().has(namespace) && this.driftFor(namespace).length > 0;
+  }
+
+  /** Replace the stored snapshot with the live DB record. */
+  adoptLive(namespace: string) {
+    const live = this.liveData()[namespace];
+    if (!live) return;
+    this.upsertRecord(namespace, JSON.parse(JSON.stringify(live)));
+    this.driftDismissed.update((s) => { const n = new Set(s); n.delete(namespace); return n; });
+    this.store.showToast(`✅ "${namespace}": adopted live DB data.`);
+  }
+
+  dismissDrift(namespace: string) {
+    this.driftDismissed.update((s) => new Set(s).add(namespace));
+    this.store.showToast(`📌 "${namespace}": keeping your stored data.`);
+  }
+
+  liveFetchedLabel(namespace: string): string {
+    const t = this.liveFetchedAt()[namespace];
+    return t ? new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
   }
 
   onJsonEdit(namespace: string, text: string) {

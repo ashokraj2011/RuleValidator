@@ -1,42 +1,42 @@
 <div class="relative flex min-h-screen flex-col overflow-x-hidden bg-background font-sans text-neutral-850">
   <!-- Toast -->
   <div *ngIf="store.toastMessage() as toast"
-    class="animate-fade-in fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border border-secondary bg-neutral-900 px-5 py-3 text-white shadow-xl">
-    <lucide-icon name="sparkles" class="h-5 w-5 shrink-0 text-yellow-400"></lucide-icon>
-    <span class="text-xs font-semibold">{{ toast }}</span>
+    class="animate-slide-in-right fixed right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-xl border border-white/10 bg-neutral-900/95 px-4 py-3 text-white shadow-2xl ring-1 ring-black/5 backdrop-blur">
+    <lucide-icon [name]="toastIcon()" class="h-5 w-5 shrink-0" [ngClass]="toastIconClass()"></lucide-icon>
+    <span class="text-xs font-medium leading-snug">{{ toast }}</span>
   </div>
 
   <!-- Header -->
-  <header class="fixed top-0 left-0 z-40 flex h-16 w-full items-center justify-between border-b border-neutral-300 bg-white px-6 select-none">
-    <div class="flex items-center gap-6">
-      <div class="flex cursor-pointer items-center gap-2" (click)="switchTab('overview')">
-        <span class="text-lg font-extrabold tracking-tight text-primary">CCRE Rule Validation Studio</span>
+  <header class="fixed top-0 left-0 z-40 flex h-16 w-full items-center justify-between border-b border-neutral-200 bg-white/90 px-6 backdrop-blur-md select-none">
+    <div class="flex items-center gap-3 cursor-pointer" (click)="switchTab('overview')">
+      <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white shadow-xs">
+        <lucide-icon name="shield-check" class="h-5 w-5"></lucide-icon>
+      </span>
+      <div class="leading-tight">
+        <div class="flex items-center gap-2">
+          <span class="text-base font-extrabold tracking-tight text-neutral-900">Rule Validation Studio</span>
+          <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">CCRE</span>
+        </div>
+        <div class="text-[10px] font-medium text-neutral-400">{{ activeSectionLabel() }}</div>
       </div>
-      <nav class="hidden h-full items-center gap-4 md:flex">
-        <button type="button" (click)="switchTab('overview')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors"
-          [ngClass]="store.activeTab() === 'overview' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Dashboard</button>
-        <button type="button" (click)="switchTab('test-data')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors"
-          [ngClass]="store.activeTab() === 'test-data' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Test Data</button>
-        <button type="button" (click)="switchTab('test-runs')" class="flex h-full items-center px-2 text-xs font-semibold transition-colors"
-          [ngClass]="store.activeTab() === 'test-runs' ? 'border-b-2 border-primary pb-[1px] text-primary' : 'text-neutral-500 hover:text-primary'">Evaluate</button>
-      </nav>
     </div>
 
     <div class="flex items-center gap-3">
-      <button type="button" (click)="store.showToast('Validated all active rules against current test data.')"
-        class="hidden whitespace-nowrap rounded border border-neutral-400 px-4 py-1.5 text-xs font-bold text-neutral-800 transition-colors hover:bg-neutral-50 sm:inline-block">
+      <button type="button" (click)="store.showToast('✅ Validated all active rules against current test data.')"
+        class="hidden items-center gap-1.5 whitespace-nowrap rounded-lg border border-neutral-300 px-3.5 py-1.5 text-xs font-bold text-neutral-700 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary sm:inline-flex">
+        <lucide-icon name="shield-check" class="h-3.5 w-3.5"></lucide-icon>
         Validate All
       </button>
       <div class="ml-1 flex items-center gap-1 border-l border-neutral-200 pl-3">
-        <button type="button" (click)="store.showToast('Zero critical alerts.')"
+        <button type="button" (click)="store.showToast('✅ Zero critical alerts.')"
           class="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900" title="Notifications">
           <lucide-icon name="bell" class="h-4.5 w-4.5"></lucide-icon>
         </button>
-        <button type="button" (click)="store.showToast('Settings managed via backend.')"
+        <button type="button" (click)="store.showToast('Settings are managed via the backend.')"
           class="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900" title="Preferences">
           <lucide-icon name="settings" class="h-4.5 w-4.5"></lucide-icon>
         </button>
-        <img alt="User Profile" class="ml-1.5 h-8 w-8 shrink-0 rounded-full border border-neutral-300"
+        <img alt="User Profile" class="ml-1.5 h-8 w-8 shrink-0 rounded-full border border-neutral-300 ring-2 ring-white"
           src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsYpyMxPJSuLkythkHCI1RN00yDZ0xRHm_S10Ud52TDYQmRODAyfmTUtwhLFrka4YC4gVlvIMbTnRgbcwlcKY5gTV9PUXDfjzh_QWeuSscNaDe0RQuNx195qfF3tfZHW3--dPfPL-Qn71UyB2hhO6g0jFOcHPBA8GvgExXoJ0MQB1GFS2GNFleeIXc2tTGGgOmPV7g9uzkxWbh0zgSpP0OabrRpM_Memk_CUrLghNQPbtC51EOn2PqhzyzCAMVlBrcYn9CgxaeFXY" />
       </div>
     </div>
@@ -57,34 +57,30 @@
             <div class="text-[9px] font-bold uppercase tracking-wider text-neutral-400">Enterprise Validation</div>
           </div>
         </div>
-        <div class="rounded-lg border border-neutral-200 bg-white p-3">
-          <div class="truncate text-xs font-bold text-secondary">{{ selectedRule().name }}</div>
-          <div class="mt-0.5 text-[10px] text-neutral-400">{{ selectedRule().rule_id }} • {{ store.allRules().length }} rules loaded</div>
+        <div class="rounded-lg border border-l-[3px] border-neutral-200 border-l-secondary bg-white p-3 shadow-xs">
+          <div class="text-[9px] font-bold uppercase tracking-wider text-neutral-400">Selected rule</div>
+          <div class="mt-0.5 truncate text-xs font-bold text-secondary" [title]="selectedRule().name">{{ selectedRule().name }}</div>
+          <div class="mt-0.5 font-mono text-[10px] text-neutral-400">{{ selectedRule().rule_id }} • {{ store.allRules().length }} rules</div>
         </div>
       </div>
 
       <!-- Navigation -->
-      <div class="shrink-0 space-y-1 px-3 pb-3">
-        <p class="px-3 pb-1 text-[9px] font-bold uppercase tracking-widest text-neutral-400">Navigation</p>
-        <button type="button" (click)="switchTab('overview')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
-          [ngClass]="store.activeTab() === 'overview' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
-          <lucide-icon name="layout-dashboard" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Overview</span>
-        </button>
-        <button type="button" (click)="switchTab('test-data')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
-          [ngClass]="store.activeTab() === 'test-data' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
-          <lucide-icon name="database" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Test Data</span>
-        </button>
-        <button type="button" (click)="switchTab('generated')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
-          [ngClass]="store.activeTab() === 'generated' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
-          <lucide-icon name="beaker" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Generated Tests</span>
-        </button>
-        <button type="button" (click)="switchTab('test-runs')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
-          [ngClass]="store.activeTab() === 'test-runs' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
-          <lucide-icon name="circle-play" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Evaluate / Test Runs</span>
-        </button>
-        <button type="button" (click)="switchTab('coverage')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all outline-none"
-          [ngClass]="store.activeTab() === 'coverage' ? 'bg-[#79a9fd]/20 font-extrabold text-[#003c7e]' : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900'">
-          <lucide-icon name="trending-up" class="h-4 w-4 shrink-0 text-primary"></lucide-icon><span class="text-xs font-semibold">Coverage</span>
+      <div class="shrink-0 space-y-0.5 px-3 pb-3">
+        <p class="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-neutral-400">Navigation</p>
+        <button
+          *ngFor="let item of navItems"
+          type="button"
+          (click)="switchTab(item.tab)"
+          class="group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left outline-none transition-all focus-visible:ring-2 focus-visible:ring-primary/40"
+          [ngClass]="store.activeTab() === item.tab ? 'bg-primary/10 font-semibold text-primary' : 'text-neutral-600 hover:bg-neutral-200/70 hover:text-neutral-900'"
+        >
+          <span *ngIf="store.activeTab() === item.tab" class="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary"></span>
+          <lucide-icon
+            [name]="item.icon"
+            class="h-4 w-4 shrink-0 transition-colors"
+            [ngClass]="store.activeTab() === item.tab ? 'text-primary' : 'text-neutral-400 group-hover:text-neutral-600'"
+          ></lucide-icon>
+          <span class="text-xs font-semibold">{{ item.label }}</span>
         </button>
       </div>
 
@@ -163,6 +159,8 @@
           @case ('generated') { <app-generated-tests-tab></app-generated-tests-tab> }
           @case ('test-runs') { <app-test-runs-tab></app-test-runs-tab> }
           @case ('coverage')  { <app-coverage-tab></app-coverage-tab> }
+          @case ('validate')  { <app-validate-tab></app-validate-tab> }
+          @case ('library')   { <app-library-tab></app-library-tab> }
         }
       </div>
     </main>

@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { LucideAngularModule } from 'lucide-angular';
 import { EvalResult } from '../../models/types';
+import { diffTraces } from '../../kernel';
 import { RuleEngineService } from '../../services/rule-engine.service';
 import { RuleStoreService } from '../../services/rule-store.service';
 import { EvalNodeComponent } from '../eval-node/eval-node.component';
@@ -39,6 +40,19 @@ export class TestRunsTabComponent {
   readonly passedNamespaceEntries = computed((): [string, any][] => {
     if (this.evalResult().status !== 'PASSED') return [];
     return Object.entries(this.store.testData());
+  });
+
+  /**
+   * Regression signal: how this live evaluation differs from the most recent
+   * recorded run of the selected rule. Surfaces an outcome flip or changed
+   * conditions ("what changed since last time?").
+   */
+  readonly regression = computed(() => {
+    const runs = [...this.store.runsForSelectedRule()].sort((a, b) => a.runAt.localeCompare(b.runAt));
+    const last = runs[runs.length - 1];
+    if (!last) return null;
+    const diff = diffTraces(last.evalResult, this.evalResult());
+    return diff.outcomeChanged || diff.changedCount > 0 ? diff : null;
   });
 
   constructor() {

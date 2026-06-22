@@ -31,7 +31,7 @@
       [ngClass]="[leafClasses(node, path), node.shortCircuited ? 'opacity-50' : '']"
     >
       <lucide-icon
-        [name]="node.shortCircuited ? 'circle-minus' : node.status === 'PASSED' ? 'circle-check' : node.status === 'FAILED' ? 'triangle-alert' : 'circle-minus'"
+        [name]="statusIcon(node)"
         class="h-4.5 w-4.5 shrink-0"
         [ngClass]="node.shortCircuited ? 'text-neutral-400' : statusColor(node.status)"
       ></lucide-icon>
@@ -39,6 +39,7 @@
         <span class="text-xs font-bold" [ngClass]="node.shortCircuited ? 'text-neutral-400 italic' : 'text-neutral-800'">
           {{ node.expression }}
           <span *ngIf="node.shortCircuited" class="ml-1 text-[9px] font-normal not-italic text-neutral-400">(short-circuited)</span>
+          <span *ngIf="node.reason && !node.shortCircuited" class="ml-1 text-[9px] font-normal text-amber-600">({{ node.reason }})</span>
         </span>
         <div class="flex items-center gap-4 text-[11px]">
           <span *ngIf="!node.shortCircuited" class="text-neutral-400">

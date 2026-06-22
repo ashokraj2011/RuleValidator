@@ -1,0 +1,99 @@
+<div class="space-y-5">
+  <!-- Header -->
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h2 class="flex items-center gap-2 text-xl font-bold tracking-tight text-neutral-900">
+        <lucide-icon name="shield-check" class="h-5 w-5 text-primary"></lucide-icon>
+        Validate
+      </h2>
+      <p class="mt-0.5 text-xs text-neutral-500">
+        Static pre-flight checks — type errors, undefined attributes, cyclic references and
+        contradictory branches, found before any test data is involved.
+      </p>
+    </div>
+  </div>
+
+  <!-- Portfolio summary -->
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div class="rounded-xl border border-green-200 bg-green-50/50 p-3">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-green-700">Clean rules</p>
+      <p class="mt-1 text-2xl font-extrabold text-green-700">{{ summary().clean }}<span class="text-sm font-semibold text-neutral-400">/{{ summary().rules }}</span></p>
+    </div>
+    <div class="rounded-xl border border-red-200 bg-red-50/50 p-3">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-red-700">Rules with errors</p>
+      <p class="mt-1 text-2xl font-extrabold text-red-700">{{ summary().withErrors }}</p>
+    </div>
+    <div class="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-amber-700">Total errors</p>
+      <p class="mt-1 text-2xl font-extrabold text-amber-700">{{ summary().totalErrors }}</p>
+    </div>
+    <div class="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-neutral-500">Total warnings</p>
+      <p class="mt-1 text-2xl font-extrabold text-neutral-700">{{ summary().totalWarnings }}</p>
+    </div>
+  </div>
+
+  <!-- Selected rule findings -->
+  <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
+    <div class="mb-3 flex items-center justify-between">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Selected rule</p>
+        <p class="text-sm font-bold text-neutral-800">{{ selected().rule.name }}</p>
+      </div>
+      <span
+        class="rounded-full px-2.5 py-1 text-[11px] font-bold"
+        [ngClass]="selected().errors > 0 ? 'bg-red-100 text-red-700' : selected().warnings > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'"
+      >
+        {{ selected().errors > 0 ? selected().errors + ' error(s)' : selected().warnings > 0 ? selected().warnings + ' warning(s)' : 'Passes validation' }}
+      </span>
+    </div>
+
+    <div *ngIf="selected().findings.length === 0" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/50 px-3 py-3 text-sm text-green-700">
+      <lucide-icon name="circle-check" class="h-4 w-4"></lucide-icon>
+      No problems found. The rule type-checks, references resolve, and at least one input can both pass and fail it.
+    </div>
+
+    <div class="space-y-2">
+      <div
+        *ngFor="let f of selected().findings"
+        class="flex items-start gap-2.5 rounded-lg border px-3 py-2.5"
+        [ngClass]="severityClass(f.severity)"
+      >
+        <lucide-icon [name]="severityIcon(f.severity)" class="mt-0.5 h-4 w-4 shrink-0" [ngClass]="iconColor(f.severity)"></lucide-icon>
+        <div class="min-w-0">
+          <p class="text-sm font-semibold">{{ f.message }}</p>
+          <p class="mt-0.5 font-mono text-[10px] text-neutral-500">
+            {{ f.code }}<span *ngIf="f.where"> · {{ f.where }}</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- All rules -->
+  <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
+    <p class="mb-3 text-[10px] font-bold uppercase tracking-widest text-neutral-400">All rules</p>
+    <div class="space-y-1.5">
+      <button
+        *ngFor="let r of allRuleFindings()"
+        type="button"
+        (click)="select(r.rule.rule_id)"
+        class="flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:bg-neutral-50"
+        [ngClass]="rowClass(r)"
+      >
+        <lucide-icon
+          [name]="r.errors > 0 ? 'octagon-x' : r.warnings > 0 ? 'triangle-alert' : 'circle-check'"
+          class="h-4 w-4 shrink-0"
+          [ngClass]="r.errors > 0 ? 'text-red-600' : r.warnings > 0 ? 'text-amber-600' : 'text-green-600'"
+        ></lucide-icon>
+        <div class="min-w-0 flex-1">
+          <span class="block truncate text-xs font-bold text-neutral-800">{{ r.rule.name }}</span>
+          <span class="font-mono text-[9px] text-neutral-400">{{ r.rule.rule_id }}</span>
+        </div>
+        <span class="shrink-0 text-[11px] font-semibold" [ngClass]="r.errors > 0 ? 'text-red-600' : r.warnings > 0 ? 'text-amber-600' : 'text-green-600'">
+          {{ r.errors > 0 ? r.errors + 'E' : '' }}{{ r.errors > 0 && r.warnings > 0 ? ' · ' : '' }}{{ r.warnings > 0 ? r.warnings + 'W' : '' }}{{ r.findings.length === 0 ? 'clean' : '' }}
+        </span>
+      </button>
+    </div>
+  </div>
+</div>

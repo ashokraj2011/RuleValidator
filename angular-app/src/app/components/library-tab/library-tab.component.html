@@ -1,0 +1,107 @@
+<div class="space-y-6">
+  <!-- Header -->
+  <div>
+    <h2 class="flex items-center gap-2 text-xl font-bold tracking-tight text-neutral-900">
+      <lucide-icon name="archive" class="h-5 w-5 text-primary"></lucide-icon>
+      Library
+    </h2>
+    <p class="mt-0.5 text-xs text-neutral-500">
+      Reusable <span class="font-semibold">fixtures</span> (named test data) and
+      <span class="font-semibold">suites</span> (groups of cases). Built on
+      <span class="font-semibold text-secondary">{{ store.selectedRule().name }}</span>.
+    </p>
+  </div>
+
+  <!-- Fixtures -->
+  <section class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <p class="flex items-center gap-2 text-sm font-bold text-neutral-800">
+        <lucide-icon name="beaker" class="h-4 w-4 text-secondary"></lucide-icon>
+        Fixtures <span class="text-xs font-normal text-neutral-400">({{ fixtures().length }})</span>
+      </p>
+      <div class="flex gap-2">
+        <button type="button" (click)="newFixtureFromRule(true)"
+          class="flex items-center gap-1.5 rounded-lg border border-green-300 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-50">
+          <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon> Synthesize PASS
+        </button>
+        <button type="button" (click)="newFixtureFromRule(false)"
+          class="flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50">
+          <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon> Synthesize FAIL
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="fixtures().length === 0" class="rounded-lg border border-dashed border-neutral-300 py-8 text-center text-xs text-neutral-400">
+      No fixtures yet. Synthesize one from the selected rule, or save test data as a fixture.
+    </div>
+
+    <div class="grid gap-2 sm:grid-cols-2">
+      <div *ngFor="let f of fixtures()" class="rounded-lg border border-neutral-200 p-3 card-hover">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-bold text-neutral-800">{{ f.name }}</p>
+            <p *ngIf="f.description" class="mt-0.5 truncate text-[11px] text-neutral-500">{{ f.description }}</p>
+          </div>
+          <span class="shrink-0 text-[10px] text-neutral-400">{{ formatDate(f.createdAt) }}</span>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-1">
+          <span *ngFor="let ns of fixtureNamespaces(f)" class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-600">{{ ns }}</span>
+        </div>
+        <div class="mt-3 flex gap-2">
+          <button type="button" (click)="useFixture(f)"
+            class="flex items-center gap-1 rounded bg-primary px-2.5 py-1 text-[11px] font-bold text-white hover:opacity-90">
+            <lucide-icon name="circle-play" class="h-3 w-3"></lucide-icon> Use &amp; evaluate
+          </button>
+          <button type="button" (click)="deleteFixture(f)"
+            class="flex items-center gap-1 rounded border border-neutral-200 px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:bg-neutral-50">
+            <lucide-icon name="trash-2" class="h-3 w-3"></lucide-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Suites -->
+  <section class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <p class="flex items-center gap-2 text-sm font-bold text-neutral-800">
+        <lucide-icon name="layers" class="h-4 w-4 text-secondary"></lucide-icon>
+        Suites <span class="text-xs font-normal text-neutral-400">({{ suites().length }})</span>
+      </p>
+      <div class="flex items-center gap-2">
+        <input type="text" [ngModel]="newSuiteName()" (ngModelChange)="newSuiteName.set($event)"
+          placeholder="Suite name…"
+          class="rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+        <button type="button" (click)="createSuiteFromRule()"
+          class="flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-bold text-neutral-700 hover:bg-neutral-50">
+          <lucide-icon name="plus" class="h-3.5 w-3.5"></lucide-icon> From rule's cases
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="suites().length === 0" class="rounded-lg border border-dashed border-neutral-300 py-8 text-center text-xs text-neutral-400">
+      No suites yet. Group the selected rule's test cases into a runnable suite.
+    </div>
+
+    <div class="space-y-2">
+      <div *ngFor="let s of suites()" class="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3 card-hover">
+        <div class="min-w-0">
+          <p class="truncate text-sm font-bold text-neutral-800">{{ s.name }}</p>
+          <p class="mt-0.5 text-[11px] text-neutral-500">
+            {{ ruleName(s.ruleId) }} • {{ s.caseIds.length }} case(s) • {{ formatDate(s.createdAt) }}
+          </p>
+        </div>
+        <div class="flex shrink-0 gap-2">
+          <button type="button" (click)="runSuite(s)"
+            class="flex items-center gap-1 rounded bg-primary px-2.5 py-1 text-[11px] font-bold text-white hover:opacity-90">
+            <lucide-icon name="play" class="h-3 w-3"></lucide-icon> Run
+          </button>
+          <button type="button" (click)="deleteSuite(s)"
+            class="flex items-center gap-1 rounded border border-neutral-200 px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:bg-neutral-50">
+            <lucide-icon name="trash-2" class="h-3 w-3"></lucide-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

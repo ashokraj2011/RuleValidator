@@ -1,49 +1,31 @@
-export type ActiveTab = 'overview' | 'test-data' | 'generated' | 'test-runs' | 'coverage';
+export type ActiveTab = 'overview' | 'test-data' | 'generated' | 'test-runs' | 'coverage' | 'validate' | 'library';
 
-// --- Rule Grammar Types ---
+// --- Rule grammar + evaluation types ---
+// The kernel (src/app/kernel) is the single source of truth; the app re-exports
+// the shapes so existing imports from '../models/types' keep working.
+import type {
+  ComparisonOperator,
+  LogicalOperator,
+  ComparisonTerm,
+  LogicalTerm,
+  RuleRefTerm,
+  Term,
+  Rule,
+  EvalResult,
+  EvalStatus,
+} from '../kernel';
 
-export type ComparisonOperator =
-  | 'equal_to'
-  | 'not_equal_to'
-  | 'greater_than'
-  | 'greater_than_equal'
-  | 'less_than'
-  | 'less_than_equal'
-  | 'contains'
-  | 'not_contains'
-  | 'in'
-  | 'not_in'
-  | 'exists'
-  | 'not_exists';
-
-export type LogicalOperator = 'AND' | 'OR' | 'NOT';
-
-// A leaf term that compares a namespace.attribute against a value
-export interface ComparisonTerm {
-  namespace: string;
-  attribute: string;
-  operator: ComparisonOperator;
-  value: any;
-}
-
-// A logical grouping of terms (AND/OR/NOT)
-export interface LogicalTerm {
-  operator: LogicalOperator;
-  terms: Term[];
-}
-
-// A reference to another rule (for chaining)
-export interface RuleRefTerm {
-  rule_ref: string;
-}
-
-export type Term = ComparisonTerm | LogicalTerm | RuleRefTerm;
-
-export interface Rule {
-  rule_id: string;
-  name: string;
-  terms: LogicalTerm;
-}
+export type {
+  ComparisonOperator,
+  LogicalOperator,
+  ComparisonTerm,
+  LogicalTerm,
+  RuleRefTerm,
+  Term,
+  Rule,
+  EvalResult,
+  EvalStatus,
+};
 
 // --- Namespace Data (test data per namespace) ---
 
@@ -65,18 +47,31 @@ export interface NamespaceConfig {
   isEdited: boolean;
 }
 
-// --- Evaluation Result Types ---
+// --- Fixtures (reusable, named test data) ---
 
-export interface EvalResult {
-  expression: string;
-  namespace?: string;
-  attribute?: string;
-  operator: string;
-  expected: any;
-  actual: any;
-  status: 'PASSED' | 'FAILED' | 'SKIPPED';
-  shortCircuited?: boolean;   // true when skipped due to AND/OR short-circuit
-  children?: EvalResult[];
+/**
+ * A named, reusable data snapshot. One fixture ("Adult US VIP") can be composed
+ * into many test cases instead of re-typing the data inline each time.
+ */
+export interface Fixture {
+  id: string;
+  name: string;
+  description?: string;
+  /** typed data per namespace */
+  data: TestDataSnapshot;
+  createdAt: string;
+}
+
+// --- Suites (grouping of cases) ---
+
+/** A named grouping of test cases for a rule — run-all / tag / report as a unit. */
+export interface Suite {
+  id: string;
+  name: string;
+  description?: string;
+  ruleId: string;
+  caseIds: string[];
+  createdAt: string;
 }
 
 // --- Named Test Cases ---
@@ -100,6 +95,10 @@ export interface TestCase {
   ruleId: string;
   /** Origin of the case: 'system' = auto-generated PASS/FAIL pair, 'user' = hand-authored */
   source?: 'system' | 'user';
+  /** Optional free-form tags for filtering / grouping. */
+  tags?: string[];
+  /** Optional fixture this case's data was sourced from (Arrange step). */
+  fixtureId?: string;
   /** DB keys per namespace */
   dbKeys: Record<string, string>;
   /** Data snapshot per namespace */
